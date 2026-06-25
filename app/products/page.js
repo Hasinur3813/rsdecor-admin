@@ -1,11 +1,5 @@
-import AdminShell from "@/components/layout/AdminShell";
+import ProductsClient from "@/components/products/ProductsClient";
 export const metadata = { title: "Products" };
 export default function ProductsPage() {
-  return (
-    <AdminShell>
-      <div className="p-6">
-        <p className="text-gray-400 text-sm">Products — coming soon</p>
-      </div>
-    </AdminShell>
-  );
+  return <ProductsClient />;
 }
