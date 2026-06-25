@@ -1,3 +1,9 @@
 import { configureStore } from "@reduxjs/toolkit";
-const dummyReducer = (state = {}) => state;
-export const store = configureStore({ reducer: { dummy: dummyReducer } });
+import authReducer from "./slices/authSlice";
+
+export const store = configureStore({
+  reducer: {
+    auth: authReducer,
+  },
+  devTools: process.env.NODE_ENV !== "production",
+});

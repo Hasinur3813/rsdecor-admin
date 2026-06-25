@@ -13,8 +13,10 @@ import {
   Image,
   Settings,
   Megaphone,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "@/hooks/useAuth";
 
 const NAV = [
   {
@@ -51,6 +53,7 @@ const NAV = [
 export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { logout, loading } = useAuth();
   const [expanded, setExpanded] = useState(["Products"]);
 
   const toggle = (label) =>
@@ -66,18 +69,18 @@ export default function AdminSidebar() {
   return (
     <aside
       className="hidden lg:flex fixed left-0 top-0 h-screen w-64
-      flex-col z-40 bg-sidebar border-r border-white/5"
+      flex-col z-40 bg-white border-r border-gray-200"
     >
       {/* Brand */}
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-white/5">
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-gray-200">
         <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
           <Layers className="w-5 h-5 text-white" />
         </div>
         <div>
-          <p className="font-heading font-bold text-white text-base leading-none">
+          <p className="font-heading font-bold text-gray-900 text-base leading-none">
             RS Wallpaper
           </p>
-          <p className="text-[10px] text-white/30 uppercase tracking-widest mt-0.5">
+          <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-0.5">
             Admin Panel
           </p>
         </div>
@@ -89,7 +92,7 @@ export default function AdminSidebar() {
           <div key={group.group}>
             <p
               className="text-[10px] font-semibold tracking-widest
-              text-white/25 px-3 mb-2"
+              text-gray-400 px-3 mb-2"
             >
               {group.group}
             </p>
@@ -111,8 +114,8 @@ export default function AdminSidebar() {
                         cursor-pointer transition-all duration-150 text-sm
                         ${
                           active
-                            ? "bg-primary/20 text-white"
-                            : "text-white/45 hover:bg-white/6 hover:text-white/80"
+                            ? "bg-primary/10 text-gray-900"
+                            : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                         }`}
                     >
                       <Icon
@@ -134,7 +137,7 @@ export default function AdminSidebar() {
 
                       {hasKids && (
                         <ChevronDown
-                          className="w-3.5 h-3.5 text-white/30 transition-transform duration-200"
+                          className="w-3.5 h-3.5 text-gray-400 transition-transform duration-200"
                           style={{
                             transform: isExpanded ? "rotate(180deg)" : "none",
                           }}
@@ -146,7 +149,7 @@ export default function AdminSidebar() {
                     {hasKids && isExpanded && (
                       <div
                         className="ml-7 mt-0.5 space-y-0.5
-                        border-l border-white/8 pl-3"
+                        border-l border-gray-200 pl-3"
                       >
                         {item.children.map((child) => {
                           const childActive = pathname === child.href;
@@ -159,7 +162,7 @@ export default function AdminSidebar() {
                                 ${
                                   childActive
                                     ? "text-primary font-semibold"
-                                    : "text-white/40 hover:text-white/70"
+                                    : "text-gray-500 hover:text-gray-700"
                                 }`}
                             >
                               <span
@@ -167,7 +170,7 @@ export default function AdminSidebar() {
                                 style={{
                                   background: childActive
                                     ? "var(--color-primary)"
-                                    : "rgba(255,255,255,0.25)",
+                                    : "#d1d5db",
                                 }}
                               />
                               {child.label}
@@ -185,14 +188,19 @@ export default function AdminSidebar() {
       </nav>
 
       {/* Logout */}
-      <div className="p-3 border-t border-white/5">
+      <div className="p-3 border-t border-gray-200">
         <button
-          onClick={() => router.push("/login")}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
-            text-sm text-white/40 hover:bg-red-500/10 hover:text-red-400
-            transition-all cursor-pointer"
+          onClick={() => logout()}
+          disabled={loading}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
+            text-sm transition-all cursor-pointer
+            ${loading ? "opacity-50 cursor-not-allowed" : "text-gray-600 hover:bg-red-50 hover:text-red-600"}`}
         >
-          <LogOut className="w-4 h-4" />
+          {loading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <LogOut className="w-4 h-4" />
+          )}
           Sign Out
         </button>
       </div>

@@ -1,11 +1,5 @@
-import AdminShell from "@/components/layout/AdminShell";
+import SettingsClient from "@/components/settings/SettingsClient";
 export const metadata = { title: "Settings" };
 export default function SettingsPage() {
-  return (
-    <AdminShell>
-      <div className="p-6">
-        <p className="text-gray-400 text-sm">Settings — coming soon</p>
-      </div>
-    </AdminShell>
-  );
+  return <SettingsClient />;
 }
