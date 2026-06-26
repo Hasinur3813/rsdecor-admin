@@ -74,7 +74,7 @@ export default function AdminSidebar({ isOpen, setIsOpen }) {
 
   return (
     <aside
-      className={`hidden lg:flex fixed left-0 top-0 h-screen flex-col z-40 bg-white border-r border-gray-200 transition-all duration-300 ${isOpen ? "w-64" : "w-16"}`}
+      className={`hidden lg:flex fixed left-0 top-0 h-screen flex-col z-1000 bg-white border-r border-gray-200 transition-all duration-300 ${isOpen ? "w-64" : "w-16"}`}
     >
       {/* Brand */}
       <div
@@ -164,11 +164,43 @@ export default function AdminSidebar({ isOpen, setIsOpen }) {
                       )}
                     </div>
 
-                    {/* Tooltip for collapsed state */}
+                    {/* Collapsed mode: tooltip with optional submenu */}
                     {!isOpen && (
-                      <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50 transition-opacity whitespace-nowrap">
-                        {item.label}
-                        {item.badge && ` (${item.badge})`}
+                      <div className="absolute left-full top-0 ml-2 opacity-0 group-hover:opacity-100 transition-opacity z-2000">
+                        {hasKids ? (
+                          <div className="bg-white rounded-lg border border-gray-200 shadow-lg py-2 min-w-45">
+                            {/* Main item label */}
+                            <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">
+                              {item.label}
+                              {item.badge && ` (${item.badge})`}
+                            </div>
+                            {/* Submenu items */}
+                            <div className="py-1">
+                              {item.children.map((child) => {
+                                const childActive = pathname === child.href;
+                                return (
+                                  <Link
+                                    key={child.href}
+                                    href={child.href}
+                                    className={`block px-3 py-2 text-sm transition-colors
+                                      ${
+                                        childActive
+                                          ? "bg-primary/10 text-primary font-medium"
+                                          : "text-gray-600 hover:bg-gray-50"
+                                      }`}
+                                  >
+                                    {child.label}
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap">
+                            {item.label}
+                            {item.badge && ` (${item.badge})`}
+                          </div>
+                        )}
                       </div>
                     )}
 

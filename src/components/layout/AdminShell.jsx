@@ -5,17 +5,21 @@ import AdminSidebar from "./AdminSidebar";
 import AdminTopbar from "./AdminTopbar";
 import AdminMobileNav from "./AdminMobileNav";
 
-export default function AdminShell({ children }) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-  // Persist sidebar state in localStorage
-  useEffect(() => {
+// Helper to get initial sidebar state from localStorage
+const getInitialSidebarState = () => {
+  if (typeof window !== "undefined") {
     const saved = localStorage.getItem("sidebar-open");
     if (saved !== null) {
-      setIsSidebarOpen(saved === "true");
+      return saved === "true";
     }
-  }, []);
+  }
+  return true; // Default to open if no saved state
+};
 
+export default function AdminShell({ children }) {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(getInitialSidebarState);
+
+  // Persist sidebar state in localStorage when it changes
   useEffect(() => {
     localStorage.setItem("sidebar-open", isSidebarOpen.toString());
   }, [isSidebarOpen]);
@@ -24,14 +28,14 @@ export default function AdminShell({ children }) {
     <AuthGuard>
       <div className="min-h-screen flex bg-surface">
         <AdminSidebar isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
-        <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${isSidebarOpen ? "lg:ml-64" : "lg:ml-16"}`}>
+        <div
+          className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${isSidebarOpen ? "lg:ml-64" : "lg:ml-16"}`}
+        >
           <AdminTopbar
             isSidebarOpen={isSidebarOpen}
             setIsSidebarOpen={setIsSidebarOpen}
           />
-          <main className="flex-1 overflow-auto pb-20 lg:pb-0">
-            {children}
-          </main>
+          <main className="flex-1 overflow-auto pb-20 lg:pb-0">{children}</main>
         </div>
         <AdminMobileNav />
       </div>
