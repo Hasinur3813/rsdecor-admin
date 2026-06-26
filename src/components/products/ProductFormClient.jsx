@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { useForm, Controller } from "react-hook-form";
 import toast from "react-hot-toast";
 import AdminShell from "@/components/layout/AdminShell";
 import Button from "@/components/ui/Button";
@@ -10,36 +11,17 @@ import Select from "@/components/ui/Select";
 import Toggle from "@/components/ui/Toggle";
 import TagsInput from "@/components/ui/TagsInput";
 import ImageUpload from "@/components/ui/ImageUpload";
+import MultiSelect from "@/components/ui/MultiSelect";
 import {
   PRODUCTS,
-  CATEGORIES,
+  CATEGORY_OPTIONS,
+  ROOM_TYPE_OPTIONS,
+  FEATURES_OPTIONS,
   MATERIAL_OPTIONS,
   COLOR_FAMILY_OPTIONS,
   WARRANTY_OPTIONS,
   FINISH_OPTIONS,
 } from "@/lib/products";
-
-// Initial form state
-const initialFormData = {
-  name: "",
-  slug: "",
-  category: "",
-  roomType: "",
-  material: "",
-  finish: "",
-  pricePerSqft: "",
-  warranty: "",
-  isNew: false,
-  isBestSeller: false,
-  isFeatured: false,
-  colorFamily: "",
-  tags: [],
-  images: [],
-  imageAlt: "",
-  description: "",
-  stock: "",
-  status: "InStock",
-};
 
 export default function ProductFormClient() {
   const router = useRouter();
@@ -51,78 +33,76 @@ export default function ProductFormClient() {
     ? PRODUCTS.find((p) => p.id === params.id)
     : null;
 
-  const [formData, setFormData] = useState(
-    existingProduct || initialFormData
-  );
-  const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Get available categories and room types
-  const categoryOptions = CATEGORIES.flatMap((cat) =>
-    cat.items.map((item) => ({
-      label: item.label,
-      value: item.filter.category,
-    }))
-  );
+  // Initialize react-hook-form
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+    setValue,
+    watch,
+  } = useForm({
+    defaultValues: existingProduct || {
+      name: "",
+      slug: "",
+      category: "",
+      roomType: "",
+      material: "",
+      finish: "",
+      pricePerSqft: "",
+      warranty: "",
+      isNew: false,
+      isBestSeller: false,
+      isFeatured: false,
+      colorFamily: "",
+      tags: [],
+      features: [],
+      images: [],
+      imageAlt: "",
+      description: "",
+      stock: "",
+      status: "InStock",
+    },
+  });
 
-  // Get unique room types based on selected category
-  const getRoomTypeOptions = () => {
-    if (!formData.category) return [];
-    const roomTypes = [];
-    CATEGORIES.forEach((cat) => {
-      cat.items.forEach((item) => {
-        if (
-          item.filter.category === formData.category &&
-          item.filter.room
-        ) {
-          roomTypes.push(item.filter.room);
-        }
-      });
-    });
-    return [...new Set(roomTypes)];
+  // Get available categories and room types - independent of each other
+  const categoryOptions = CATEGORY_OPTIONS;
+  const roomTypeOptions = ROOM_TYPE_OPTIONS;
+
+  // Watch name field for auto-slug generation
+  const watchedName = watch("name");
+  const watchedSlug = watch("slug");
+
+  // Slugify function to convert product name to URL-friendly slug
+  const slugify = (text) => {
+    if (!text) return "";
+    return text
+      .toString()
+      .toLowerCase()
+      .trim()
+      .replace(/&/g, "-and-")
+      .replace(/[\s\W-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
   };
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: null }));
+  // Auto-generate slug when product name changes
+  useEffect(() => {
+    if (watchedName) {
+      const generatedSlug = slugify(watchedName);
+      setValue("slug", generatedSlug, { shouldDirty: true });
     }
-  };
+  }, [watchedName, setValue]);
 
-  const handleToggle = (name, value) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const validateForm = () => {
-    const newErrors = {};
-    if (!formData.name.trim()) newErrors.name = "Product name is required";
-    if (!formData.category) newErrors.category = "Category is required";
-    if (!formData.pricePerSqft) newErrors.pricePerSqft = "Price is required";
-    if (formData.images.length === 0)
-      newErrors.images = "At least one image is required";
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!validateForm()) {
-      toast.error("Please fill in all required fields");
-      return;
-    }
-
+  const onSubmit = async (data) => {
     setIsSubmitting(true);
-
-    // Simulate API call
+    console.log(data);
     try {
       await new Promise((resolve) => setTimeout(resolve, 1500));
       toast.success(
-        isEdit ? "Product updated successfully!" : "Product created successfully!"
+        isEdit
+          ? "Product updated successfully!"
+          : "Product created successfully!",
       );
       router.push("/products");
     } catch (error) {
@@ -156,7 +136,10 @@ export default function ProductFormClient() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+        >
           {/* Left Column - Main Info */}
           <div className="lg:col-span-2 flex flex-col gap-6">
             {/* Basic Information */}
@@ -165,34 +148,52 @@ export default function ProductFormClient() {
                 Basic Information
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input
-                  label="Product Name"
+                <Controller
                   name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  error={errors.name}
-                  required
-                  placeholder="e.g., Royal Floral 3D Wallpaper"
+                  control={control}
+                  rules={{
+                    required: "Product name is required",
+                  }}
+                  render={({ field, fieldState }) => (
+                    <Input
+                      label="Product Name"
+                      {...field}
+                      error={fieldState.error?.message}
+                      required
+                      placeholder="e.g., Royal Floral 3D Wallpaper"
+                    />
+                  )}
                 />
-                <Input
-                  label="Slug"
+                <Controller
                   name="slug"
-                  value={formData.slug}
-                  onChange={handleChange}
-                  placeholder="e.g., royal-floral-3d-wallpaper"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      label="Slug"
+                      {...field}
+                      placeholder="e.g., royal-floral-3d-wallpaper"
+                      disabled={true}
+                    />
+                  )}
                 />
               </div>
               <div className="mt-4">
-                <label className="block text-sm font-semibold text-gray-800 mb-1.5">
-                  Description
-                </label>
-                <textarea
+                <Controller
                   name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                  placeholder="Enter product description..."
-                  rows={4}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none"
+                  control={control}
+                  render={({ field }) => (
+                    <>
+                      <label className="block text-sm font-semibold text-gray-800 mb-1.5">
+                        Description
+                      </label>
+                      <textarea
+                        {...field}
+                        placeholder="Enter product description..."
+                        rows={4}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none"
+                      />
+                    </>
+                  )}
                 />
               </div>
             </div>
@@ -203,50 +204,92 @@ export default function ProductFormClient() {
                 Classification
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Select
-                  label="Category"
+                <Controller
                   name="category"
-                  options={categoryOptions}
-                  value={formData.category}
-                  onChange={handleChange}
-                  error={errors.category}
-                  required
+                  control={control}
+                  rules={{
+                    required: "Category is required",
+                  }}
+                  render={({ field, fieldState }) => (
+                    <Select
+                      label="Category"
+                      {...field}
+                      options={categoryOptions}
+                      error={fieldState.error?.message}
+                      required
+                    />
+                  )}
                 />
-                <Select
-                  label="Room Type"
+                <Controller
                   name="roomType"
-                  options={getRoomTypeOptions()}
-                  value={formData.roomType}
-                  onChange={handleChange}
-                  placeholder="Select room type"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      label="Room Type"
+                      {...field}
+                      options={roomTypeOptions}
+                      placeholder="Select room type"
+                    />
+                  )}
                 />
-                <Select
-                  label="Material"
+                <Controller
                   name="material"
-                  options={MATERIAL_OPTIONS}
-                  value={formData.material}
-                  onChange={handleChange}
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      label="Material"
+                      {...field}
+                      options={MATERIAL_OPTIONS}
+                    />
+                  )}
                 />
-                <Select
-                  label="Finish"
+                <Controller
                   name="finish"
-                  options={FINISH_OPTIONS}
-                  value={formData.finish}
-                  onChange={handleChange}
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      label="Finish"
+                      {...field}
+                      options={FINISH_OPTIONS}
+                    />
+                  )}
                 />
-                <Select
-                  label="Color Family"
+                <Controller
                   name="colorFamily"
-                  options={COLOR_FAMILY_OPTIONS}
-                  value={formData.colorFamily}
-                  onChange={handleChange}
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      label="Color Family"
+                      {...field}
+                      options={COLOR_FAMILY_OPTIONS}
+                    />
+                  )}
                 />
-                <Select
-                  label="Warranty"
+                <Controller
                   name="warranty"
-                  options={WARRANTY_OPTIONS}
-                  value={formData.warranty}
-                  onChange={handleChange}
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      label="Warranty"
+                      {...field}
+                      options={WARRANTY_OPTIONS}
+                    />
+                  )}
+                />
+              </div>
+              <div className="mt-4">
+                <Controller
+                  name="features"
+                  control={control}
+                  render={({ field }) => (
+                    <MultiSelect
+                      label="Features"
+                      options={FEATURES_OPTIONS}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="Select product features"
+                    />
+                  )}
                 />
               </div>
             </div>
@@ -257,47 +300,68 @@ export default function ProductFormClient() {
                 Pricing & Inventory
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input
-                  label="Price per Sqft (৳)"
+                <Controller
                   name="pricePerSqft"
-                  type="number"
-                  value={formData.pricePerSqft}
-                  onChange={handleChange}
-                  error={errors.pricePerSqft}
-                  required
-                  placeholder="e.g., 140"
+                  control={control}
+                  rules={{
+                    required: "Price is required",
+                  }}
+                  render={({ field, fieldState }) => (
+                    <Input
+                      label="Price per Sqft (৳)"
+                      type="number"
+                      {...field}
+                      error={fieldState.error?.message}
+                      required
+                      placeholder="e.g., 140"
+                    />
+                  )}
                 />
-                <Input
-                  label="Stock Quantity"
+                <Controller
                   name="stock"
-                  type="number"
-                  value={formData.stock}
-                  onChange={handleChange}
-                  placeholder="e.g., 45"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      label="Stock Quantity"
+                      type="number"
+                      {...field}
+                      placeholder="e.g., 45"
+                    />
+                  )}
                 />
               </div>
               <div className="mt-4">
-                <Select
-                  label="Status"
+                <Controller
                   name="status"
-                  options={[
-                    { label: "In Stock", value: "InStock" },
-                    { label: "Low Stock", value: "LowStock" },
-                    { label: "Out of Stock", value: "OutOfStock" },
-                  ]}
-                  value={formData.status}
-                  onChange={handleChange}
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      label="Status"
+                      {...field}
+                      options={[
+                        { label: "In Stock", value: "InStock" },
+                        { label: "Low Stock", value: "LowStock" },
+                        { label: "Out of Stock", value: "OutOfStock" },
+                      ]}
+                    />
+                  )}
                 />
               </div>
             </div>
 
             {/* Tags */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <TagsInput
-                label="Tags"
-                tags={formData.tags}
-                onChange={(tags) => setFormData((prev) => ({ ...prev, tags }))}
-                placeholder="Type and press Space to add tags"
+              <Controller
+                name="tags"
+                control={control}
+                render={({ field }) => (
+                  <TagsInput
+                    label="Tags"
+                    tags={field.value}
+                    onChange={field.onChange}
+                    placeholder="Type and press Space to add tags"
+                  />
+                )}
               />
             </div>
           </div>
@@ -306,23 +370,35 @@ export default function ProductFormClient() {
           <div className="lg:col-span-1 flex flex-col gap-6">
             {/* Images */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <ImageUpload
-                label="Product Images"
-                images={formData.images}
-                onChange={(images) =>
-                  setFormData((prev) => ({ ...prev, images }))
-                }
-                multiple={true}
-                maxFiles={10}
-                error={errors.images}
+              <Controller
+                name="images"
+                control={control}
+                rules={{
+                  validate: (value) =>
+                    value?.length > 0 || "At least one image is required",
+                }}
+                render={({ field, fieldState }) => (
+                  <ImageUpload
+                    label="Product Images"
+                    images={field.value}
+                    onChange={field.onChange}
+                    multiple={true}
+                    maxFiles={10}
+                    error={fieldState.error?.message}
+                  />
+                )}
               />
               <div className="mt-4">
-                <Input
-                  label="Image Alt Text"
+                <Controller
                   name="imageAlt"
-                  value={formData.imageAlt}
-                  onChange={handleChange}
-                  placeholder="Describe the main image"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      label="Image Alt Text"
+                      {...field}
+                      placeholder="Describe the main image"
+                    />
+                  )}
                 />
               </div>
             </div>
@@ -333,20 +409,38 @@ export default function ProductFormClient() {
                 Product Flags
               </h3>
               <div className="space-y-4">
-                <Toggle
-                  label="New Arrival"
-                  checked={formData.isNew}
-                  onChange={(val) => handleToggle("isNew", val)}
+                <Controller
+                  name="isNew"
+                  control={control}
+                  render={({ field }) => (
+                    <Toggle
+                      label="New Arrival"
+                      checked={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
                 />
-                <Toggle
-                  label="Best Seller"
-                  checked={formData.isBestSeller}
-                  onChange={(val) => handleToggle("isBestSeller", val)}
+                <Controller
+                  name="isBestSeller"
+                  control={control}
+                  render={({ field }) => (
+                    <Toggle
+                      label="Best Seller"
+                      checked={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
                 />
-                <Toggle
-                  label="Featured"
-                  checked={formData.isFeatured}
-                  onChange={(val) => handleToggle("isFeatured", val)}
+                <Controller
+                  name="isFeatured"
+                  control={control}
+                  render={({ field }) => (
+                    <Toggle
+                      label="Featured"
+                      checked={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
                 />
               </div>
             </div>
@@ -359,8 +453,8 @@ export default function ProductFormClient() {
                     ? "Updating..."
                     : "Creating..."
                   : isEdit
-                  ? "Update Product"
-                  : "Create Product"}
+                    ? "Update Product"
+                    : "Create Product"}
               </Button>
               <Button
                 variant="outline"

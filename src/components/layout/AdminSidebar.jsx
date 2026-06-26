@@ -56,7 +56,7 @@ const NAV = [
   },
 ];
 
-export default function AdminSidebar() {
+export default function AdminSidebar({ isOpen, setIsOpen }) {
   const pathname = usePathname();
   const router = useRouter();
   const { logout, loading } = useAuth();
@@ -74,34 +74,39 @@ export default function AdminSidebar() {
 
   return (
     <aside
-      className="hidden lg:flex fixed left-0 top-0 h-screen w-64
-      flex-col z-40 bg-white border-r border-gray-200"
+      className={`hidden lg:flex fixed left-0 top-0 h-screen flex-col z-40 bg-white border-r border-gray-200 transition-all duration-300 ${isOpen ? "w-64" : "w-16"}`}
     >
       {/* Brand */}
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-gray-200">
-        <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
+      <div
+        className={`flex items-center ${isOpen ? "gap-3 px-5" : "justify-center"} py-5 border-b border-gray-200`}
+      >
+        <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shrink-0">
           <Layers className="w-5 h-5 text-white" />
         </div>
-        <div>
-          <p className="font-heading font-bold text-gray-900 text-base leading-none">
-            RS Wallpaper
-          </p>
-          <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-0.5">
-            Admin Panel
-          </p>
-        </div>
+        {isOpen && (
+          <div className="min-w-0">
+            <p className="font-heading font-bold text-gray-900 text-base leading-none truncate">
+              RS Wallpaper
+            </p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-0.5">
+              Admin Panel
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
         {NAV.map((group) => (
           <div key={group.group}>
-            <p
-              className="text-[10px] font-semibold tracking-widest
-              text-gray-400 px-3 mb-2"
-            >
-              {group.group}
-            </p>
+            {isOpen && (
+              <p
+                className="text-[10px] font-semibold tracking-widest
+                text-gray-400 px-3 mb-2"
+              >
+                {group.group}
+              </p>
+            )}
 
             <div className="space-y-0.5">
               {group.items.map((item) => {
@@ -111,12 +116,12 @@ export default function AdminSidebar() {
                 const isExpanded = expanded.includes(item.label);
 
                 return (
-                  <div key={item.label}>
+                  <div key={item.label} className="relative group">
                     <div
                       onClick={() =>
                         hasKids ? toggle(item.label) : router.push(item.href)
                       }
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl
+                      className={`flex items-center ${isOpen ? "gap-3 px-3" : "justify-center px-2"} py-2.5 rounded-xl
                         cursor-pointer transition-all duration-150 text-sm
                         ${
                           active
@@ -130,29 +135,45 @@ export default function AdminSidebar() {
                           color: active ? "var(--color-primary)" : undefined,
                         }}
                       />
-                      <span className="flex-1 font-medium">{item.label}</span>
+                      {isOpen && (
+                        <>
+                          <span className="flex-1 font-medium">
+                            {item.label}
+                          </span>
 
-                      {item.badge && (
-                        <span
-                          className="text-[10px] font-bold text-white
-                          bg-primary px-1.5 py-0.5 rounded-full leading-none"
-                        >
-                          {item.badge}
-                        </span>
-                      )}
+                          {item.badge && (
+                            <span
+                              className="text-[10px] font-bold text-white
+                              bg-primary px-1.5 py-0.5 rounded-full leading-none"
+                            >
+                              {item.badge}
+                            </span>
+                          )}
 
-                      {hasKids && (
-                        <ChevronDown
-                          className="w-3.5 h-3.5 text-gray-400 transition-transform duration-200"
-                          style={{
-                            transform: isExpanded ? "rotate(180deg)" : "none",
-                          }}
-                        />
+                          {hasKids && (
+                            <ChevronDown
+                              className="w-3.5 h-3.5 text-gray-400 transition-transform duration-200"
+                              style={{
+                                transform: isExpanded
+                                  ? "rotate(180deg)"
+                                  : "none",
+                              }}
+                            />
+                          )}
+                        </>
                       )}
                     </div>
 
-                    {/* Children */}
-                    {hasKids && isExpanded && (
+                    {/* Tooltip for collapsed state */}
+                    {!isOpen && (
+                      <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50 transition-opacity whitespace-nowrap">
+                        {item.label}
+                        {item.badge && ` (${item.badge})`}
+                      </div>
+                    )}
+
+                    {/* Children - only show when sidebar is open */}
+                    {isOpen && hasKids && isExpanded && (
                       <div
                         className="ml-7 mt-0.5 space-y-0.5
                         border-l border-gray-200 pl-3"
@@ -198,7 +219,7 @@ export default function AdminSidebar() {
         <button
           onClick={() => logout()}
           disabled={loading}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
+          className={`w-full flex items-center ${isOpen ? "gap-3 px-3" : "justify-center px-2"} py-2.5 rounded-xl
             text-sm transition-all cursor-pointer
             ${loading ? "opacity-50 cursor-not-allowed" : "text-gray-600 hover:bg-red-50 hover:text-red-600"}`}
         >
@@ -207,7 +228,7 @@ export default function AdminSidebar() {
           ) : (
             <LogOut className="w-4 h-4" />
           )}
-          Sign Out
+          {isOpen && <span>Sign Out</span>}
         </button>
       </div>
     </aside>

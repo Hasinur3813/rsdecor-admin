@@ -1,6 +1,6 @@
 "use client";
 import { usePathname } from "next/navigation";
-import { ChevronRight, Bell, Plus, LogOut } from "lucide-react";
+import { ChevronRight, Bell, Plus, LogOut, Menu, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -19,7 +19,7 @@ const LABEL_MAP = {
   "/settings": "Settings",
 };
 
-export default function AdminTopbar() {
+export default function AdminTopbar({ isSidebarOpen, setIsSidebarOpen }) {
   const pathname = usePathname();
   const router = useRouter();
   const { admin, logout } = useAuth();
@@ -43,23 +43,36 @@ export default function AdminTopbar() {
       className="sticky top-0 z-30 h-16 bg-white border-b border-gray-100
       flex items-center justify-between px-4 lg:px-6 gap-4"
     >
-      <nav className="flex items-center gap-1.5 text-sm min-w-0">
-        <span className="text-gray-400 shrink-0">Admin</span>
-        {segments.map((seg, i) => (
-          <span key={i} className="flex items-center gap-1.5 min-w-0">
-            <ChevronRight className="w-3.5 h-3.5 text-gray-300 shrink-0" />
-            <span
-              className={`truncate ${
-                i === segments.length - 1
-                  ? "font-semibold text-gray-800"
-                  : "text-gray-400"
-              }`}
-            >
-              {seg}
+      <div className="flex items-center gap-4">
+        {/* Sidebar Toggle Button */}
+        <button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-colors"
+        >
+          {isSidebarOpen ? (
+            <X className="w-4 h-4" />
+          ) : (
+            <Menu className="w-4 h-4" />
+          )}
+        </button>
+        <nav className="flex items-center gap-1.5 text-sm min-w-0">
+          <span className="text-gray-400 shrink-0">Admin</span>
+          {segments.map((seg, i) => (
+            <span key={i} className="flex items-center gap-1.5 min-w-0">
+              <ChevronRight className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+              <span
+                className={`truncate ${
+                  i === segments.length - 1
+                    ? "font-semibold text-gray-800"
+                    : "text-gray-400"
+                }`}
+              >
+                {seg}
+              </span>
             </span>
-          </span>
-        ))}
-      </nav>
+          ))}
+        </nav>
+      </div>
 
       <div className="flex items-center gap-2 shrink-0">
         <button
