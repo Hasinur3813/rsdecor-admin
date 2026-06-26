@@ -14,6 +14,9 @@ import {
   Settings,
   Megaphone,
   Loader2,
+  Tag,
+  MonitorPlay,
+  Grid,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
@@ -37,6 +40,8 @@ const NAV = [
       },
       { label: "Orders", href: "/orders", icon: ShoppingBag, badge: 3 },
       { label: "Customers", href: "/customers", icon: Users },
+      { label: "Categories", href: "/categories", icon: Grid },
+      { label: "Coupons", href: "/coupons", icon: Tag },
       { label: "Enquiries", href: "/enquiries", icon: MessageSquare, badge: 5 },
       { label: "Broadcasts", href: "/broadcasts", icon: Megaphone },
     ],
@@ -44,6 +49,7 @@ const NAV = [
   {
     group: "CONTENT",
     items: [
+      { label: "Sliders", href: "/sliders", icon: MonitorPlay },
       { label: "Gallery", href: "/gallery", icon: Image },
       { label: "Settings", href: "/settings", icon: Settings },
     ],

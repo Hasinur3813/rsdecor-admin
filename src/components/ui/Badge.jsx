@@ -4,6 +4,7 @@ const STATUS_STYLES = {
   OutOfStock: "bg-red-100 text-red-600",
   Active: "bg-green-100 text-green-700",
   Inactive: "bg-gray-100 text-gray-600",
+  Expired: "bg-red-100 text-red-700",
   Pending: "bg-amber-100 text-amber-700",
   Confirmed: "bg-blue-100 text-blue-700",
   "In Progress": "bg-orange-100 text-orange-700",
@@ -13,6 +14,7 @@ const STATUS_STYLES = {
   Replied: "bg-green-100 text-green-700",
   Sent: "bg-green-100 text-green-700",
   Draft: "bg-amber-100 text-amber-700",
+  Published: "bg-green-100 text-green-700",
 };
 
 export default function Badge({ status, className, children, ...props }) {
