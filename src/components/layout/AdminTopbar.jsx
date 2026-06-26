@@ -10,8 +10,11 @@ const LABEL_MAP = {
   "/products/new": "Add Product",
   "/orders": "Orders",
   "/customers": "Customers",
+  "/categories": "Categories",
+  "/coupons": "Coupons",
   "/enquiries": "Enquiries",
   "/broadcasts": "Broadcasts",
+  "/sliders": "Sliders",
   "/gallery": "Gallery",
   "/settings": "Settings",
 };
