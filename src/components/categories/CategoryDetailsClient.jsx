@@ -199,7 +199,7 @@ export default function CategoryDetailsClient() {
                       className="p-4 border border-gray-100 rounded-xl hover:border-primary/30 hover:bg-primary/5 cursor-pointer transition-all"
                     >
                       <div className="flex items-start gap-3">
-                        <div className="w-16 h-12 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0">
+                        <div className="w-16 h-12 rounded-lg bg-gray-100 overflow-hidden shrink-0">
                           {item.image ? (
                             <img
                               src={item.image}

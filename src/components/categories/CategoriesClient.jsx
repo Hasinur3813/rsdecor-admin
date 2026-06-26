@@ -353,7 +353,7 @@ export default function CategoriesClient() {
                       <TableRow key={category.id}>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 flex-shrink-0">
+                            <div className="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 shrink-0">
                               {category.image ? (
                                 <img
                                   src={category.image}

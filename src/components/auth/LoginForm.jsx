@@ -176,7 +176,7 @@ function LoginContent() {
               </div>
               <button
                 onClick={dismissError}
-                className="text-red-400/50 hover:text-red-400 text-xs flex-shrink-0"
+                className="text-red-400/50 hover:text-red-400 text-xs shrink-0"
               >
                 ✕
               </button>
@@ -185,7 +185,7 @@ function LoginContent() {
 
           {cooldown > 0 && (
             <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 mb-6">
-              <Loader2 className="w-4 h-4 text-amber-400 animate-spin flex-shrink-0" />
+              <Loader2 className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
               <p className="text-sm text-amber-300">
                 Too many attempts. Try again in{" "}
                 <span className="font-bold">{cooldown}s</span>

@@ -33,7 +33,7 @@ export default function SubcategoriesClient() {
 
   // Filter subcategories
   const filteredSubcategories = (category?.items || []).filter((sub) =>
-    sub.label.toLowerCase().includes(searchTerm.toLowerCase())
+    sub.label.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   // Table hook
@@ -95,7 +95,11 @@ export default function SubcategoriesClient() {
             </p>
           </div>
           <div className="ml-auto">
-            <Button onClick={() => router.push(`/categories/${category.id}/subcategories/new`)}>
+            <Button
+              onClick={() =>
+                router.push(`/categories/${category.id}/subcategories/new`)
+              }
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add Subcategory
             </Button>
@@ -158,7 +162,7 @@ export default function SubcategoriesClient() {
                   {paginatedData.map((subcategory) => (
                     <TableRow key={subcategory.id}>
                       <TableCell>
-                        <div className="w-12 h-10 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 flex-shrink-0">
+                        <div className="w-12 h-10 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 shrink-0">
                           {subcategory.image ? (
                             <img
                               src={subcategory.image}
@@ -194,7 +198,7 @@ export default function SubcategoriesClient() {
                             size="sm"
                             onClick={() =>
                               router.push(
-                                `/categories/${category.id}/subcategories/${subcategory.id}/edit`
+                                `/categories/${category.id}/subcategories/${subcategory.id}/edit`,
                               )
                             }
                           >

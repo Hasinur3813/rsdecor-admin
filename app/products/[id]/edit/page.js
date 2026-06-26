@@ -1,5 +1,5 @@
 import ProductFormClient from "@/components/products/ProductFormClient";
-export const metadata = { title: "Add Product" };
-export default function NewProductPage() {
+export const metadata = { title: "Edit Product" };
+export default function EditProductPage() {
   return <ProductFormClient />;
 }

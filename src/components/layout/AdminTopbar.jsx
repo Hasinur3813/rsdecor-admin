@@ -44,10 +44,10 @@ export default function AdminTopbar() {
       flex items-center justify-between px-4 lg:px-6 gap-4"
     >
       <nav className="flex items-center gap-1.5 text-sm min-w-0">
-        <span className="text-gray-400 flex-shrink-0">Admin</span>
+        <span className="text-gray-400 shrink-0">Admin</span>
         {segments.map((seg, i) => (
           <span key={i} className="flex items-center gap-1.5 min-w-0">
-            <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+            <ChevronRight className="w-3.5 h-3.5 text-gray-300 shrink-0" />
             <span
               className={`truncate ${
                 i === segments.length - 1
@@ -61,7 +61,7 @@ export default function AdminTopbar() {
         ))}
       </nav>
 
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={() => router.push("/products/new")}
           className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl

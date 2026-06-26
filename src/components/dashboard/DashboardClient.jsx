@@ -639,7 +639,7 @@ export default function DashboardClient() {
                   </span>
                   <div className="text-xs text-gray-400 mt-0.5">{enq.area}</div>
                 </div>
-                <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                <div className="flex flex-col items-end gap-2 shrink-0">
                   <StatusBadge status={enq.status} />
                   <a
                     href={`tel:${enq.phone}`}
@@ -667,11 +667,11 @@ export default function DashboardClient() {
                 key={idx}
                 className="flex items-center gap-4 p-4 hover:bg-gray-50/50 transition-colors"
               >
-                <span className="text-lg font-bold text-gray-200 w-6 flex-shrink-0 text-center">
+                <span className="text-lg font-bold text-gray-200 w-6 shrink-0 text-center">
                   {idx + 1}
                 </span>
                 <div
-                  className="w-10 h-10 rounded-xl flex-shrink-0"
+                  className="w-10 h-10 rounded-xl shrink-0"
                   style={{
                     background: `linear-gradient(135deg, ${p.gradient[0]}, ${p.gradient[1]})`,
                   }}
@@ -682,7 +682,7 @@ export default function DashboardClient() {
                   </div>
                   <div className="text-xs text-gray-400">{p.category}</div>
                 </div>
-                <div className="text-right flex-shrink-0">
+                <div className="text-right shrink-0">
                   <div className="text-sm font-semibold text-gray-800">
                     {formatBDT(p.revenue)}
                   </div>
