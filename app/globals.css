@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+  /* Core palette — edit here to restyle everything */
+  --color-primary: #c8956c;
+  --color-primary-dark: #b07d58;
+  --color-secondary: #4a7c6f;
+  --color-sidebar: #1a1f2e;
+  --color-surface: #f8fafc;
+
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-heading: "Playfair Display", Georgia, serif;
+}
