@@ -13,21 +13,55 @@ export const loginAdmin = createAsyncThunk(
   "auth/login",
   async ({ email, password }, { rejectWithValue }) => {
     try {
-      const response = await axiosInstance.post(ENDPOINTS.login, {
-        email: String(email).trim().toLowerCase(),
-        password,
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const demoEmail = "admin@rswallpaper.com";
+      const demoPassword = "Admin@1234";
+
+      return await new Promise((resolve, reject) => {
+        setTimeout(() => {
+          if (
+            normalizedEmail === demoEmail &&
+            String(password) === demoPassword
+          ) {
+            const demoAdmin = {
+              id: "demo-admin",
+              name: "Demo Admin",
+              email: normalizedEmail,
+              role: "admin",
+            };
+            const token = "demo-admin-token";
+            const expiry = Date.now() + TOKEN_TTL;
+
+            if (typeof window !== "undefined") {
+              localStorage.setItem("rs_admin_token", token);
+              localStorage.setItem("rs_admin_user", JSON.stringify(demoAdmin));
+              localStorage.setItem("rs_admin_token_expiry", String(expiry));
+            }
+
+            resolve({ token, admin: demoAdmin, expiry });
+          } else {
+            reject(
+              new Error(
+                "Invalid demo credentials. Use admin@rswallpaper.com and Admin@1234.",
+              ),
+            );
+          }
+        }, 600);
       });
 
-      const { token, admin } = response.data;
-      const expiry = Date.now() + TOKEN_TTL;
-
-      if (typeof window !== "undefined") {
-        localStorage.setItem("rs_admin_token", token);
-        localStorage.setItem("rs_admin_user", JSON.stringify(admin));
-        localStorage.setItem("rs_admin_token_expiry", String(expiry));
-      }
-
-      return { token, admin, expiry };
+      // Uncomment and wire this up once the real backend login is ready.
+      // const response = await axiosInstance.post(ENDPOINTS.login, {
+      //   email: normalizedEmail,
+      //   password,
+      // });
+      // const { token, admin } = response.data;
+      // const expiry = Date.now() + TOKEN_TTL;
+      // if (typeof window !== "undefined") {
+      //   localStorage.setItem("rs_admin_token", token);
+      //   localStorage.setItem("rs_admin_user", JSON.stringify(admin));
+      //   localStorage.setItem("rs_admin_token_expiry", String(expiry));
+      // }
+      // return { token, admin, expiry };
     } catch (err) {
       return rejectWithValue(
         err.response?.data?.message ||
