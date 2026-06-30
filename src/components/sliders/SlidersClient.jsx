@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useDispatch, useSelector } from "react-redux";
 import {
   Plus,
   Search,
@@ -11,7 +12,10 @@ import {
   Image as ImageIcon,
   GripVertical,
   MonitorPlay,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import AdminShell from "@/components/layout/AdminShell";
 import {
   Table,
@@ -22,35 +26,104 @@ import {
   TableCell,
 } from "@/components/ui/Table";
 import TablePagination from "@/components/ui/TablePagination";
+import TableSkeleton from "@/components/ui/TableSkeleton";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import { useTable } from "@/hooks/useTable";
-import { SLIDERS, formatDate } from "@/lib/sliders";
+import {
+  fetchSliders,
+  deleteSlider,
+  resetDeleteState,
+} from "@/store/slices/sliderSlice";
 
-// Calculate stats
-const getSliderStats = (sliders) => {
-  const totalSliders = sliders.length;
-  const activeSliders = sliders.filter((s) => s.status === "Active").length;
-  return { totalSliders, activeSliders };
-};
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const formatDate = (d) =>
+  new Date(d).toLocaleDateString("en-BD", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+const getSliderStats = (sliders) => ({
+  totalSliders: sliders.length,
+  activeSliders: sliders.filter((s) => s.status === "Active").length,
+});
+
+// Column config for the skeleton (matches the 6 table columns)
+const SKELETON_COLUMNS = [
+  { width: "w-8", type: "text" },
+  { width: "w-40", type: "double" },
+  { width: "w-16", type: "image" },
+  { width: "w-16", type: "badge" },
+  { width: "w-20", type: "text" },
+  { width: "w-20", type: "actions" },
+];
 
 export default function SlidersClient() {
   const router = useRouter();
+  const dispatch = useDispatch();
+
+  const {
+    sliders,
+    fetchLoading,
+    fetchError,
+    deleteLoading,
+    deleteSuccess,
+    deleteError,
+  } = useSelector((state) => state.slider);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [deletingId, setDeletingId] = useState(null);
 
-  // Filter sliders
-  const filteredSliders = SLIDERS.filter((slider) => {
-    const matchesSearch =
-      slider.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      slider.subtitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      slider.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus =
-      filterStatus === "All" || slider.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  }).sort((a, b) => a.order - b.order);
+  // ── Fetch on mount ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    dispatch(fetchSliders());
+  }, [dispatch]);
 
-  // Table hook
+  // ── Delete feedback ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (deleteSuccess) {
+      toast.success("Slider deleted successfully!");
+      setDeletingId(null);
+      dispatch(resetDeleteState());
+    }
+  }, [deleteSuccess, dispatch]);
+
+  useEffect(() => {
+    if (deleteError) {
+      toast.error(deleteError);
+      setDeletingId(null);
+      dispatch(resetDeleteState());
+    }
+  }, [deleteError, dispatch]);
+
+  // ── Delete handler ──────────────────────────────────────────────────────────
+  const handleDelete = (slider) => {
+    if (!window.confirm(`Delete slider "${slider.heading}"?`)) return;
+    setDeletingId(slider.id);
+    dispatch(deleteSlider(slider.id));
+  };
+
+  // ── Filter & search ─────────────────────────────────────────────────────────
+  const filteredSliders = (sliders || [])
+    .filter((slider) => {
+      const matchesSearch =
+        (slider.heading || "")
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        (slider.subtext || "")
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        String(slider.id).toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus =
+        filterStatus === "All" || slider.status === filterStatus;
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => (a.sliderId || a.id) - (b.sliderId || b.id));
+
+  // ── Table hook ──────────────────────────────────────────────────────────────
   const {
     paginatedData,
     sortBy,
@@ -63,7 +136,7 @@ export default function SlidersClient() {
     handleSort,
   } = useTable({
     data: filteredSliders,
-    initialSortBy: "order",
+    initialSortBy: "id",
     initialSortOrder: "asc",
     initialItemsPerPage: 5,
   });
@@ -103,7 +176,7 @@ export default function SlidersClient() {
               </div>
               <div>
                 <div className="text-2xl font-bold text-gray-900 font-heading">
-                  {stats.totalSliders}
+                  {fetchLoading ? "—" : stats.totalSliders}
                 </div>
                 <div className="text-xs font-medium text-gray-500">
                   Total Sliders
@@ -119,7 +192,7 @@ export default function SlidersClient() {
               </div>
               <div>
                 <div className="text-2xl font-bold text-gray-900 font-heading">
-                  {stats.activeSliders}
+                  {fetchLoading ? "—" : stats.activeSliders}
                 </div>
                 <div className="text-xs font-medium text-gray-500">
                   Active Sliders
@@ -129,6 +202,24 @@ export default function SlidersClient() {
           </div>
         </div>
 
+        {/* Fetch Error Banner */}
+        {fetchError && (
+          <div className="flex items-center justify-between gap-4 p-4 bg-red-50 border border-red-100 rounded-xl">
+            <div className="flex items-center gap-3 text-sm text-red-700">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <span>{fetchError}</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => dispatch(fetchSliders())}
+            >
+              <RefreshCw className="w-3.5 h-3.5 mr-1" />
+              Retry
+            </Button>
+          </div>
+        )}
+
         {/* Filters & Search */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
@@ -137,7 +228,7 @@ export default function SlidersClient() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search sliders by title or subtitle..."
+                placeholder="Search sliders by heading or subtext..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
@@ -167,19 +258,19 @@ export default function SlidersClient() {
               <TableRow>
                 <TableHead
                   sortable
-                  sortKey="order"
+                  sortKey="id"
                   sortBy={sortBy}
                   sortOrder={sortOrder}
                   onSort={handleSort}
                 >
                   <div className="flex items-center gap-1">
                     <GripVertical className="w-3.5 h-3.5" />
-                    Order
+                    ID
                   </div>
                 </TableHead>
                 <TableHead
                   sortable
-                  sortKey="title"
+                  sortKey="heading"
                   sortBy={sortBy}
                   sortOrder={sortOrder}
                   onSort={handleSort}
@@ -209,21 +300,23 @@ export default function SlidersClient() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedData.length > 0 ? (
+              {fetchLoading ? (
+                <TableSkeleton rows={5} columns={SKELETON_COLUMNS} />
+              ) : paginatedData.length > 0 ? (
                 paginatedData.map((slider) => (
-                  <TableRow key={slider.id}>
+                  <TableRow key={slider.id || slider._id}>
                     <TableCell>
                       <span className="text-sm font-semibold text-gray-700">
-                        #{slider.order}
+                        #{slider.id}
                       </span>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col min-w-0">
                         <span className="text-sm font-semibold text-gray-800 truncate max-w-xs">
-                          {slider.title}
+                          {slider.heading}
                         </span>
                         <span className="text-xs text-gray-500 truncate max-w-xs">
-                          {slider.subtitle}
+                          {slider.subtext}
                         </span>
                         {slider.badge && (
                           <span className="text-xs text-primary font-medium mt-0.5">
@@ -235,10 +328,10 @@ export default function SlidersClient() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <div className="w-16 h-10 rounded-lg bg-gray-100 overflow-hidden border border-gray-200">
-                          {slider.bgImage ? (
+                          {slider.image ? (
                             <img
-                              src={slider.bgImage}
-                              alt={slider.title}
+                              src={slider.image}
+                              alt={slider.alt || slider.heading}
                               className="w-full h-full object-cover"
                             />
                           ) : (
@@ -250,11 +343,11 @@ export default function SlidersClient() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge status={slider.status} />
+                      <Badge status={slider.status || "Active"} />
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-gray-500">
-                        {formatDate(slider.createdAt)}
+                        {slider.createdAt ? formatDate(slider.createdAt) : "—"}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
@@ -262,7 +355,9 @@ export default function SlidersClient() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => router.push(`/sliders/${slider.id}`)}
+                          onClick={() =>
+                            router.push(`/sliders/${slider.id}`)
+                          }
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </Button>
@@ -279,8 +374,14 @@ export default function SlidersClient() {
                           variant="ghost"
                           size="sm"
                           className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                          disabled={deleteLoading && deletingId === slider.id}
+                          onClick={() => handleDelete(slider)}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          {deleteLoading && deletingId === slider.id ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
                         </Button>
                       </div>
                     </TableCell>
@@ -290,24 +391,28 @@ export default function SlidersClient() {
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-12">
                     <div className="text-gray-400 text-sm">
-                      No sliders found
+                      {fetchError
+                        ? "Failed to load sliders"
+                        : "No sliders found"}
                     </div>
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
-          <TablePagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            itemsPerPage={itemsPerPage}
-            totalItems={filteredSliders.length}
-            onPageChange={setCurrentPage}
-            onItemsPerPageChange={(val) => {
-              setItemsPerPage(val);
-              setCurrentPage(1);
-            }}
-          />
+          {!fetchLoading && (
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              itemsPerPage={itemsPerPage}
+              totalItems={filteredSliders.length}
+              onPageChange={setCurrentPage}
+              onItemsPerPageChange={(val) => {
+                setItemsPerPage(val);
+                setCurrentPage(1);
+              }}
+            />
+          )}
         </div>
       </div>
     </AdminShell>
