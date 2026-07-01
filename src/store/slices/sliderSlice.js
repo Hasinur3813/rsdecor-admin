@@ -10,10 +10,10 @@ const ENDPOINTS = {
 
 export const fetchSliders = createAsyncThunk(
   "slider/fetchSliders",
-  async (_, { rejectWithValue }) => {
+  async (params = {}, { rejectWithValue }) => {
     try {
-      const response = await axiosInstance.get(ENDPOINTS.base);
-      return response.data.data;
+      const response = await axiosInstance.get(ENDPOINTS.base, { params });
+      return response.data; // { data, pagination, count }
     } catch (err) {
       return rejectWithValue(
         err.response?.data?.message || err.message || "Failed to fetch sliders",
@@ -89,6 +89,16 @@ const sliderSlice = createSlice({
   initialState: {
     // List
     sliders: [],
+    totalSliders: 0,
+    activeSliders: 0,
+    pagination: {
+      currentPage: 1,
+      totalPages: 1,
+      totalItems: 0,
+      itemsPerPage: 10,
+      hasNextPage: false,
+      hasPrevPage: false,
+    },
     fetchLoading: false,
     fetchError: null,
 
@@ -149,7 +159,12 @@ const sliderSlice = createSlice({
       })
       .addCase(fetchSliders.fulfilled, (state, action) => {
         state.fetchLoading = false;
-        state.sliders = action.payload;
+        state.sliders = action.payload.data;
+        state.totalSliders = action.payload.totalSliders || 0;
+        state.activeSliders = action.payload.activeSliders || 0;
+        if (action.payload.pagination) {
+          state.pagination = action.payload.pagination;
+        }
       })
       .addCase(fetchSliders.rejected, (state, action) => {
         state.fetchLoading = false;
@@ -198,7 +213,7 @@ const sliderSlice = createSlice({
         state.updateLoading = false;
         state.updateSuccess = true;
         const idx = state.sliders.findIndex(
-          (s) => String(s._id) === String(action.payload._id),
+          (s) => String(s.id || s._id) === String(action.payload.id || action.payload._id),
         );
         if (idx !== -1) state.sliders[idx] = action.payload;
         state.currentSlider = action.payload;
@@ -219,7 +234,7 @@ const sliderSlice = createSlice({
         state.deleteLoading = false;
         state.deleteSuccess = true;
         state.sliders = state.sliders.filter(
-          (s) => String(s._id) !== String(action.payload),
+          (s) => String(s.id || s._id) !== String(action.payload),
         );
       })
       .addCase(deleteSlider.rejected, (state, action) => {

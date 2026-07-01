@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -29,11 +29,13 @@ import TablePagination from "@/components/ui/TablePagination";
 import TableSkeleton from "@/components/ui/TableSkeleton";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
-import { useTable } from "@/hooks/useTable";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import {
   fetchSliders,
   deleteSlider,
   resetDeleteState,
+  updateSlider,
+  resetUpdateState,
 } from "@/store/slices/sliderSlice";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -44,11 +46,6 @@ const formatDate = (d) =>
     month: "short",
     year: "numeric",
   });
-
-const getSliderStats = (sliders) => ({
-  totalSliders: sliders.length,
-  activeSliders: sliders.filter((s) => s.status === "Active").length,
-});
 
 // Column config for the skeleton (matches the 6 table columns)
 const SKELETON_COLUMNS = [
@@ -66,90 +63,155 @@ export default function SlidersClient() {
 
   const {
     sliders,
+    totalSliders,
+    activeSliders,
+    pagination,
     fetchLoading,
     fetchError,
     deleteLoading,
     deleteSuccess,
     deleteError,
+    updateLoading,
+    updateSuccess,
+    updateError,
   } = useSelector((state) => state.slider);
 
+  // ── Local pagination / filter state ─────────────────────────────────────────
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [sortBy, setSortBy] = useState("sliderId");
+  const [sortOrder, setSortOrder] = useState("asc");
   const [deletingId, setDeletingId] = useState(null);
+  const [sliderToDelete, setSliderToDelete] = useState(null);
+  const [togglingId, setTogglingId] = useState(null);
+  const [searchTimeout, setSearchTimeout] = useState(null);
 
-  // ── Fetch on mount ──────────────────────────────────────────────────────────
+  // ── Fetch sliders from server ───────────────────────────────────────────────
+  const loadSliders = useCallback(
+    (params = {}) => {
+      dispatch(
+        fetchSliders({
+          page: params.page ?? currentPage,
+          limit: params.limit ?? itemsPerPage,
+          search: params.search ?? searchTerm,
+          sort: params.sort ?? sortBy,
+          order: params.order ?? sortOrder,
+          status: params.status ?? filterStatus,
+        }),
+      );
+    },
+    [dispatch, currentPage, itemsPerPage, searchTerm, sortBy, sortOrder, filterStatus],
+  );
+
+  // ── Initial load + re-fetch when page, limit, sort, or status changes ──────
   useEffect(() => {
-    dispatch(fetchSliders());
-  }, [dispatch]);
+    loadSliders();
+  }, [currentPage, itemsPerPage, sortBy, sortOrder, filterStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Debounced search ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    const timeout = setTimeout(() => {
+      setCurrentPage(1);
+      loadSliders({ page: 1, search: searchTerm });
+    }, 400);
+    setSearchTimeout(timeout);
+    return () => clearTimeout(timeout);
+  }, [searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Delete feedback ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (deleteSuccess) {
       toast.success("Slider deleted successfully!");
       setDeletingId(null);
+      setSliderToDelete(null);
       dispatch(resetDeleteState());
+      loadSliders();
     }
-  }, [deleteSuccess, dispatch]);
+  }, [deleteSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (deleteError) {
       toast.error(deleteError);
       setDeletingId(null);
+      setSliderToDelete(null);
       dispatch(resetDeleteState());
     }
   }, [deleteError, dispatch]);
 
-  // ── Delete handler ──────────────────────────────────────────────────────────
+  // ── Update feedback ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (updateSuccess && togglingId) {
+      toast.success("Slider status updated!");
+      setTogglingId(null);
+      dispatch(resetUpdateState());
+      loadSliders(); // refresh list to ensure counts stay accurate
+    }
+  }, [updateSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (updateError && togglingId) {
+      toast.error(updateError);
+      setTogglingId(null);
+      dispatch(resetUpdateState());
+    }
+  }, [updateError, dispatch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
   const handleDelete = (slider) => {
-    if (!window.confirm(`Delete slider "${slider.heading}"?`)) return;
-    setDeletingId(slider.id);
-    dispatch(deleteSlider(slider.id));
+    setSliderToDelete(slider);
   };
 
-  // ── Filter & search ─────────────────────────────────────────────────────────
-  const filteredSliders = (sliders || [])
-    .filter((slider) => {
-      const matchesSearch =
-        (slider.heading || "")
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        (slider.subtext || "")
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        String(slider.id).toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus =
-        filterStatus === "All" || slider.status === filterStatus;
-      return matchesSearch && matchesStatus;
-    })
-    .sort((a, b) => (a.sliderId || a.id) - (b.sliderId || b.id));
+  const handleToggleStatus = (slider) => {
+    const newStatus = slider.status === "Active" ? "Inactive" : "Active";
+    setTogglingId(slider.id || slider._id);
+    const fd = new FormData();
+    fd.append("status", newStatus);
+    dispatch(updateSlider({ id: slider.id || slider._id, formData: fd }));
+  };
 
-  // ── Table hook ──────────────────────────────────────────────────────────────
-  const {
-    paginatedData,
-    sortBy,
-    sortOrder,
-    currentPage,
-    itemsPerPage,
-    totalPages,
-    setCurrentPage,
-    setItemsPerPage,
-    handleSort,
-  } = useTable({
-    data: filteredSliders,
-    initialSortBy: "id",
-    initialSortOrder: "asc",
-    initialItemsPerPage: 5,
-  });
-
-  // Reset page when filter/search changes
-  useEffect(() => {
+  const handleSort = (key) => {
+    if (sortBy === key) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(key);
+      setSortOrder("asc");
+    }
     setCurrentPage(1);
-  }, [searchTerm, filterStatus, setCurrentPage]);
+  };
 
-  const stats = getSliderStats(filteredSliders);
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (val) => {
+    setItemsPerPage(val);
+    setCurrentPage(1);
+  };
+
+  // ── Derived values ──────────────────────────────────────────────────────────
+  const { totalPages, totalItems } = pagination;
 
   return (
     <AdminShell>
+      <ConfirmModal
+        isOpen={!!sliderToDelete}
+        onClose={() => setSliderToDelete(null)}
+        onConfirm={() => {
+          const id = sliderToDelete?.id || sliderToDelete?._id;
+          if (id) {
+            setDeletingId(id);
+            dispatch(deleteSlider(id));
+          }
+        }}
+        title="Delete Slider"
+        message={sliderToDelete ? `Are you sure you want to delete the slider "${sliderToDelete.heading}"? This action cannot be undone.` : ""}
+        confirmText="Delete Slider"
+        type="danger"
+        isLoading={deleteLoading}
+      />
       <div className="flex flex-col gap-6 p-6">
         {/* Page Header */}
         <div className="flex justify-between items-start flex-wrap gap-4">
@@ -176,7 +238,7 @@ export default function SlidersClient() {
               </div>
               <div>
                 <div className="text-2xl font-bold text-gray-900 font-heading">
-                  {fetchLoading ? "—" : stats.totalSliders}
+                  {fetchLoading ? "—" : totalSliders}
                 </div>
                 <div className="text-xs font-medium text-gray-500">
                   Total Sliders
@@ -192,7 +254,7 @@ export default function SlidersClient() {
               </div>
               <div>
                 <div className="text-2xl font-bold text-gray-900 font-heading">
-                  {fetchLoading ? "—" : stats.activeSliders}
+                  {fetchLoading ? "—" : activeSliders}
                 </div>
                 <div className="text-xs font-medium text-gray-500">
                   Active Sliders
@@ -212,7 +274,7 @@ export default function SlidersClient() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => dispatch(fetchSliders())}
+              onClick={() => loadSliders()}
             >
               <RefreshCw className="w-3.5 h-3.5 mr-1" />
               Retry
@@ -240,7 +302,10 @@ export default function SlidersClient() {
               <Filter className="w-4 h-4 text-gray-400" />
               <select
                 value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
+                onChange={(e) => {
+                  setFilterStatus(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
               >
                 <option value="All">All Status</option>
@@ -258,7 +323,7 @@ export default function SlidersClient() {
               <TableRow>
                 <TableHead
                   sortable
-                  sortKey="id"
+                  sortKey="sliderId"
                   sortBy={sortBy}
                   sortOrder={sortOrder}
                   onSort={handleSort}
@@ -301,9 +366,9 @@ export default function SlidersClient() {
             </TableHeader>
             <TableBody>
               {fetchLoading ? (
-                <TableSkeleton rows={5} columns={SKELETON_COLUMNS} />
-              ) : paginatedData.length > 0 ? (
-                paginatedData.map((slider) => (
+                <TableSkeleton rows={itemsPerPage} columns={SKELETON_COLUMNS} />
+              ) : sliders.length > 0 ? (
+                sliders.map((slider) => (
                   <TableRow key={slider.id || slider._id}>
                     <TableCell>
                       <span className="text-sm font-semibold text-gray-700">
@@ -343,7 +408,34 @@ export default function SlidersClient() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge status={slider.status || "Active"} />
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          disabled={updateLoading && togglingId === (slider.id || slider._id)}
+                          onClick={() => handleToggleStatus(slider)}
+                          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                            slider.status === "Active" ? "bg-green-500" : "bg-red-500"
+                          }`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out flex items-center justify-center ${
+                              slider.status === "Active" ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          >
+                            {updateLoading && togglingId === (slider.id || slider._id) && (
+                              <RefreshCw className="w-3 h-3 text-gray-400 animate-spin" />
+                            )}
+                          </span>
+                        </button>
+                        <span
+                          className={`text-sm font-medium ${
+                            slider.status === "Active" ? "text-green-700" : "text-red-700"
+                          }`}
+                        >
+                          {slider.status || "Active"}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-gray-500">
@@ -405,12 +497,9 @@ export default function SlidersClient() {
               currentPage={currentPage}
               totalPages={totalPages}
               itemsPerPage={itemsPerPage}
-              totalItems={filteredSliders.length}
-              onPageChange={setCurrentPage}
-              onItemsPerPageChange={(val) => {
-                setItemsPerPage(val);
-                setCurrentPage(1);
-              }}
+              totalItems={totalItems}
+              onPageChange={handlePageChange}
+              onItemsPerPageChange={handleItemsPerPageChange}
             />
           )}
         </div>
