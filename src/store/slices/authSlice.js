@@ -2,66 +2,34 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axiosInstance from "@/lib/axiosInstance";
 
 const ENDPOINTS = {
-  login: "/admin/auth/login",
-  logout: "/admin/auth/logout",
-  me: "/admin/auth/me",
+  login: "/auth/admin/login",
+  logout: "/auth/logout",
+  me: "/auth/me",
 };
 
-const TOKEN_TTL = 8 * 60 * 60 * 1000;
+export const fetchMe = createAsyncThunk(
+  "auth/fetchMe",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await axiosInstance.get(ENDPOINTS.me);
+      return response.data.data; // { _id, name, email, role }
+    } catch (err) {
+      return rejectWithValue(
+        err.response?.data?.message || err.message || "Failed to fetch user",
+      );
+    }
+  },
+);
 
 export const loginAdmin = createAsyncThunk(
   "auth/login",
   async ({ email, password }, { rejectWithValue }) => {
     try {
-      const normalizedEmail = String(email).trim().toLowerCase();
-      const demoEmail = "admin@rswallpaper.com";
-      const demoPassword = "Admin@1234";
-
-      return await new Promise((resolve, reject) => {
-        setTimeout(() => {
-          if (
-            normalizedEmail === demoEmail &&
-            String(password) === demoPassword
-          ) {
-            const demoAdmin = {
-              id: "demo-admin",
-              name: "Demo Admin",
-              email: normalizedEmail,
-              role: "admin",
-            };
-            const token = "demo-admin-token";
-            const expiry = Date.now() + TOKEN_TTL;
-
-            if (typeof window !== "undefined") {
-              localStorage.setItem("rs_admin_token", token);
-              localStorage.setItem("rs_admin_user", JSON.stringify(demoAdmin));
-              localStorage.setItem("rs_admin_token_expiry", String(expiry));
-            }
-
-            resolve({ token, admin: demoAdmin, expiry });
-          } else {
-            reject(
-              new Error(
-                "Invalid demo credentials. Use admin@rswallpaper.com and Admin@1234.",
-              ),
-            );
-          }
-        }, 600);
+      const response = await axiosInstance.post(ENDPOINTS.login, {
+        email: String(email).trim().toLowerCase(),
+        password,
       });
-
-      // Uncomment and wire this up once the real backend login is ready.
-      // const response = await axiosInstance.post(ENDPOINTS.login, {
-      //   email: normalizedEmail,
-      //   password,
-      // });
-      // const { token, admin } = response.data;
-      // const expiry = Date.now() + TOKEN_TTL;
-      // if (typeof window !== "undefined") {
-      //   localStorage.setItem("rs_admin_token", token);
-      //   localStorage.setItem("rs_admin_user", JSON.stringify(admin));
-      //   localStorage.setItem("rs_admin_token_expiry", String(expiry));
-      // }
-      // return { token, admin, expiry };
+      return response.data.data.user;
     } catch (err) {
       return rejectWithValue(
         err.response?.data?.message ||
@@ -80,46 +48,16 @@ export const logoutAdmin = createAsyncThunk(
         await axiosInstance.post(ENDPOINTS.logout);
       }
     } catch (err) {
-      // Ignore logout network errors; clear local session anyway.
-    } finally {
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("rs_admin_token");
-        localStorage.removeItem("rs_admin_user");
-        localStorage.removeItem("rs_admin_token_expiry");
-      }
+      // Ignore logout network errors; local session is cleared anyway
     }
     return true;
   },
 );
 
-const loadFromStorage = () => {
-  if (typeof window === "undefined")
-    return { admin: null, token: null, valid: false };
-  try {
-    const token = localStorage.getItem("rs_admin_token");
-    const user = localStorage.getItem("rs_admin_user");
-    const expiry = localStorage.getItem("rs_admin_token_expiry");
-
-    if (!token || !user || !expiry)
-      return { admin: null, token: null, valid: false };
-    if (Date.now() > Number(expiry)) {
-      localStorage.removeItem("rs_admin_token");
-      localStorage.removeItem("rs_admin_user");
-      localStorage.removeItem("rs_admin_token_expiry");
-      return { admin: null, token: null, valid: false };
-    }
-
-    return { admin: JSON.parse(user), token, valid: true };
-  } catch {
-    return { admin: null, token: null, valid: false };
-  }
-};
-
 const authSlice = createSlice({
   name: "auth",
   initialState: {
     admin: null,
-    token: null,
     isAuthenticated: false,
     loading: false,
     initializing: true,
@@ -127,13 +65,6 @@ const authSlice = createSlice({
     sessionExpired: false,
   },
   reducers: {
-    initAuth: (state) => {
-      const { admin, token, valid } = loadFromStorage();
-      state.admin = valid ? admin : null;
-      state.token = valid ? token : null;
-      state.isAuthenticated = valid;
-      state.initializing = false;
-    },
     clearError: (state) => {
       state.error = null;
     },
@@ -141,17 +72,29 @@ const authSlice = createSlice({
       state.sessionExpired = true;
       state.isAuthenticated = false;
       state.admin = null;
-      state.token = null;
     },
     updateAdmin: (state, action) => {
       state.admin = { ...state.admin, ...action.payload };
-      if (typeof window !== "undefined") {
-        localStorage.setItem("rs_admin_user", JSON.stringify(state.admin));
-      }
     },
   },
   extraReducers: (builder) => {
     builder
+      // fetchMe
+      .addCase(fetchMe.pending, (state) => {
+        state.initializing = true;
+      })
+      .addCase(fetchMe.fulfilled, (state, action) => {
+        state.initializing = false;
+        state.isAuthenticated = true;
+        state.admin = action.payload;
+        state.sessionExpired = false;
+      })
+      .addCase(fetchMe.rejected, (state) => {
+        state.initializing = false;
+        state.isAuthenticated = false;
+        state.admin = null;
+      })
+      // loginAdmin
       .addCase(loginAdmin.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -160,8 +103,7 @@ const authSlice = createSlice({
       .addCase(loginAdmin.fulfilled, (state, action) => {
         state.loading = false;
         state.isAuthenticated = true;
-        state.admin = action.payload.admin;
-        state.token = action.payload.token;
+        state.admin = action.payload;
         state.error = null;
         state.sessionExpired = false;
       })
@@ -169,6 +111,7 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
+      // logoutAdmin
       .addCase(logoutAdmin.pending, (state) => {
         state.loading = true;
       })
@@ -176,18 +119,15 @@ const authSlice = createSlice({
         state.loading = false;
         state.isAuthenticated = false;
         state.admin = null;
-        state.token = null;
         state.error = null;
       })
       .addCase(logoutAdmin.rejected, (state) => {
         state.loading = false;
         state.isAuthenticated = false;
         state.admin = null;
-        state.token = null;
       });
   },
 });
 
-export const { initAuth, clearError, setSessionExpired, updateAdmin } =
-  authSlice.actions;
+export const { clearError, setSessionExpired, updateAdmin } = authSlice.actions;
 export default authSlice.reducer;

@@ -11,13 +11,7 @@ const axiosInstance = axios.create({
 });
 
 axiosInstance.interceptors.request.use(
-  (config) => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("rs_admin_token");
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
+  (config) => config,
   (err) => Promise.reject(err),
 );
 
@@ -27,10 +21,10 @@ axiosInstance.interceptors.response.use(
     const status = err.response?.status;
 
     if (status === 401 && typeof window !== "undefined") {
-      localStorage.removeItem("rs_admin_token");
-      localStorage.removeItem("rs_admin_user");
-      localStorage.removeItem("rs_admin_token_expiry");
-      window.location.href = "/login?reason=session_expired";
+      const url = err.config?.url || "";
+      if (!url.includes("/auth/")) {
+        window.location.href = "/login?reason=session_expired";
+      }
     }
 
     if (status === 403 && typeof window !== "undefined") {

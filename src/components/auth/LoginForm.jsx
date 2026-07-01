@@ -25,7 +25,6 @@ function LoginContent() {
 
   const [attempts, setAttempts] = useState(0);
   const [cooldown, setCooldown] = useState(0);
-  const [showHint, setShowHint] = useState(true);
 
   const {
     register,
@@ -55,15 +54,33 @@ function LoginContent() {
     }
   }, [params]);
 
+  // Initialize from storage on mount
+  useEffect(() => {
+    const savedAttempts = Number(localStorage.getItem("rs_login_attempts")) || 0;
+    setAttempts(savedAttempts);
+
+    const cooldownUntil = Number(localStorage.getItem("rs_login_cooldown_until"));
+    if (cooldownUntil && cooldownUntil > Date.now()) {
+      setCooldown(Math.ceil((cooldownUntil - Date.now()) / 1000));
+    } else {
+      localStorage.removeItem("rs_login_cooldown_until");
+    }
+  }, []);
+
+  // Precise timer interval
   useEffect(() => {
     if (cooldown <= 0) return;
     const t = setInterval(() => {
-      setCooldown((c) => {
-        if (c <= 1) {
+      setCooldown((currentCooldown) => {
+        const cooldownUntil = Number(localStorage.getItem("rs_login_cooldown_until"));
+        
+        if (!cooldownUntil || Date.now() >= cooldownUntil) {
           clearInterval(t);
+          localStorage.removeItem("rs_login_cooldown_until");
           return 0;
         }
-        return c - 1;
+        
+        return Math.ceil((cooldownUntil - Date.now()) / 1000);
       });
     }, 1000);
     return () => clearInterval(t);
@@ -72,47 +89,43 @@ function LoginContent() {
   const onSubmit = async (data) => {
     if (cooldown > 0) return;
     dismissError();
-    const result = dispatch(loginAdmin(data));
+
+    const result = await dispatch(loginAdmin(data));
 
     if (loginAdmin.fulfilled.match(result)) {
-      toast.success(
-        `Welcome back, ${result.payload.admin.name.split(" ")[0]}! 👋`,
-      );
+      // Clear persistence on success
+      localStorage.removeItem("rs_login_attempts");
+      localStorage.removeItem("rs_login_cooldown_until");
+      
+      const userName = result.payload?.name?.split(" ")[0] || "Admin";
+      toast.success(`Welcome back, ${userName}! 👋`);
       router.replace("/dashboard");
-      // localstorage.removeItem("rs_login_attempts");
-      // localstorage.removeItem("rs_cooldown");
     } else {
-      // Set field-level error
       const errorMsg = result.payload;
-      const msg = errorMsg?.toLowerCase();
-      if (msg?.includes("email")) {
+      const msg = typeof errorMsg === "string" ? errorMsg.toLowerCase() : "";
+
+      if (msg.includes("email")) {
         setFieldError("email", { message: errorMsg });
-      } else if (msg?.includes("password")) {
-        setFieldError("assword", { message: errorMsg });
+      } else if (msg.includes("password") || msg.includes("credentials")) {
+        setFieldError("password", { message: errorMsg });
+      } else if (errorMsg) {
+        toast.error(errorMsg);
       }
 
+      // Handle failed attempts & exponential backoff
       const newAttempts = attempts + 1;
-      // const hasAttempts = localstorage.getItem("rs_login_attempts");
-      // localstorage.setItem("rs_login_attempts", hasAttempts + newAttempts);
-      // const finalAttempts = newAttempts + hasAttempts;
       setAttempts(newAttempts);
+      localStorage.setItem("rs_login_attempts", String(newAttempts));
+
       if (newAttempts >= 5) {
-        setCooldown(30);
+        const multiplier = Math.pow(2, Math.min(newAttempts - 5, 4)); // max 16x multiplier
+        const durationSeconds = 30 * multiplier;
+        const cooldownUntil = Date.now() + (durationSeconds * 1000);
+        
+        localStorage.setItem("rs_login_cooldown_until", String(cooldownUntil));
+        setCooldown(durationSeconds);
+        toast.error(`Too many failed attempts. Try again in ${durationSeconds}s.`);
       }
-      // if (newAttempts >= 5) {
-      //    setCooldown( 30);
-      //   const hasCooldown = localstorage.getItem("rs_cooldown");
-      //   if (hasCooldown) {
-      //     setCooldown(hasCooldown + 30);
-      //     localstorage.setItem("rs_cooldown", hasCooldown + 30);
-      //   } else {
-      //     setCooldown(30);
-      //     localstorage.setItem("rs_cooldown", 30);
-      //   }
-      //   toast.error(`Too many attempts. Please wait ${cooldown} seconds.`, {
-      //     duration: 5000,
-      //   });
-      // }
     }
   };
 
@@ -150,8 +163,8 @@ function LoginContent() {
         <div className="flex flex-col gap-3">
           {[
             "256-bit encrypted session",
-            "Auto logout after 8 hours",
-            "Demo: admin@rswallpaper.com",
+            "Secure HTTP-only cookies",
+            "Auto session expiry",
           ].map((item) => (
             <div key={item} className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
@@ -220,7 +233,7 @@ function LoginContent() {
               <input
                 id="email"
                 type="email"
-                placeholder="admin@rswallpaper.com"
+                placeholder="you@example.com"
                 disabled={isDisabled}
                 autoComplete="email"
                 {...register("email", {
@@ -270,18 +283,6 @@ function LoginContent() {
                 />
               </div>
             </div>
-
-            {showHint && (
-              <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
-                <p className="text-xs text-primary/80 font-medium mb-1">
-                  💡 Demo Credentials
-                </p>
-                <p className="text-xs text-white/40 font-mono">
-                  admin@rswallpaper.com
-                </p>
-                <p className="text-xs text-white/40 font-mono">Admin@1234</p>
-              </div>
-            )}
 
             <button
               onClick={handleSubmit(onSubmit)}

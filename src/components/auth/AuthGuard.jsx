@@ -1,69 +1,24 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useDispatch } from "react-redux";
-import { useRouter } from "next/navigation";
 import { Layers, Loader2 } from "lucide-react";
-import { initAuth } from "@/store/slices/authSlice";
+import { fetchMe } from "@/store/slices/authSlice";
 import { useAuth } from "@/hooks/useAuth";
 import LoginForm from "./LoginForm";
 
-const EXPIRY_CHECK_MS = 60 * 1000;
-
 export default function AuthGuard({ children }) {
   const dispatch = useDispatch();
-  const router = useRouter();
   const { isAuthenticated, initializing } = useAuth();
-  const intervalRef = useRef(null);
 
   useEffect(() => {
-    dispatch(initAuth());
+    dispatch(fetchMe());
   }, [dispatch]);
 
   useEffect(() => {
     if (!initializing && !isAuthenticated) {
-      router.replace("/login?reason=unauthorized");
-    }
-  }, [initializing, isAuthenticated, router]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const checkExpiry = () => {
-      if (typeof window === "undefined") return;
-      const expiry = localStorage.getItem("rs_admin_token_expiry");
-      if (!expiry || Date.now() > Number(expiry)) {
-        localStorage.removeItem("rs_admin_token");
-        localStorage.removeItem("rs_admin_user");
-        localStorage.removeItem("rs_admin_token_expiry");
-        router.replace("/login?reason=session_expired");
-      }
-    };
-
-    checkExpiry();
-    intervalRef.current = setInterval(checkExpiry, EXPIRY_CHECK_MS);
-    return () => clearInterval(intervalRef.current);
-  }, [isAuthenticated, router]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        const expiry = localStorage.getItem("rs_admin_token_expiry");
-        if (!expiry || Date.now() > Number(expiry)) {
-          router.replace("/login?reason=session_expired");
-        }
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () =>
-      document.removeEventListener("visibilitychange", handleVisibility);
-  }, [isAuthenticated, router]);
-
-  useEffect(() => {
-    if (!isAuthenticated && !initializing) {
       window.history.replaceState(null, "", "/login");
     }
-  }, [isAuthenticated, initializing]);
+  }, [initializing, isAuthenticated]);
 
   if (initializing) {
     return (

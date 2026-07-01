@@ -11,7 +11,6 @@ export function useAuth() {
 
   const {
     admin,
-    token,
     isAuthenticated,
     loading,
     initializing,
@@ -20,7 +19,7 @@ export function useAuth() {
   } = useSelector((s) => s.auth);
 
   const logout = useCallback(async (silent = false) => {
-    await dispatch(logoutAdmin());
+     dispatch(logoutAdmin());
     if (!silent) toast.success("Logged out successfully");
     router.replace("/login");
   }, [dispatch, router]);
@@ -31,7 +30,6 @@ export function useAuth() {
 
   return {
     admin,
-    token,
     isAuthenticated,
     loading,
     initializing,
