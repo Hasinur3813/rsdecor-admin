@@ -63,6 +63,7 @@ const authSlice = createSlice({
     initializing: true,
     error: null,
     sessionExpired: false,
+    hasCheckedInitialAuth: false,
   },
   reducers: {
     clearError: (state) => {
@@ -81,18 +82,22 @@ const authSlice = createSlice({
     builder
       // fetchMe
       .addCase(fetchMe.pending, (state) => {
-        state.initializing = true;
+       if (!state.hasCheckedInitialAuth) {
+          state.initializing = true;
+        }
       })
       .addCase(fetchMe.fulfilled, (state, action) => {
         state.initializing = false;
         state.isAuthenticated = true;
         state.admin = action.payload;
         state.sessionExpired = false;
+        state.hasCheckedInitialAuth = true;
       })
       .addCase(fetchMe.rejected, (state) => {
         state.initializing = false;
         state.isAuthenticated = false;
         state.admin = null;
+        state.hasCheckedInitialAuth = true;
       })
       // loginAdmin
       .addCase(loginAdmin.pending, (state) => {

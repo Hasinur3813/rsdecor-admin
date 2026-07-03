@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import toast from "react-hot-toast";
+import axiosInstance from "@/lib/axiosInstance";
 import AdminShell from "@/components/layout/AdminShell";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -13,7 +14,6 @@ import TagsInput from "@/components/ui/TagsInput";
 import ImageUpload from "@/components/ui/ImageUpload";
 import MultiSelect from "@/components/ui/MultiSelect";
 import {
-  PRODUCTS,
   CATEGORY_OPTIONS,
   ROOM_TYPE_OPTIONS,
   FEATURES_OPTIONS,
@@ -28,12 +28,8 @@ export default function ProductFormClient() {
   const params = useParams();
   const isEdit = !!params.id;
 
-  // Find product if editing
-  const existingProduct = isEdit
-    ? PRODUCTS.find((p) => p.id === params.id)
-    : null;
-
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingProduct, setIsLoadingProduct] = useState(isEdit);
 
   // Initialize react-hook-form
   const {
@@ -42,8 +38,9 @@ export default function ProductFormClient() {
     formState: { errors },
     setValue,
     watch,
+    reset,
   } = useForm({
-    defaultValues: existingProduct || {
+    defaultValues: {
       name: "",
       slug: "",
       category: "",
@@ -52,7 +49,7 @@ export default function ProductFormClient() {
       finish: "",
       pricePerSqft: "",
       warranty: "",
-      isNew: false,
+      isNewProduct: false,
       isBestSeller: false,
       isFeatured: false,
       colorFamily: "",
@@ -66,14 +63,32 @@ export default function ProductFormClient() {
     },
   });
 
+  // Fetch product data if editing
+  useEffect(() => {
+    const fetchProduct = async () => {
+      if (!isEdit) return;
+      try {
+        const response = await axiosInstance.get(`/products/${params.id}`);
+        if (response.data?.success) {
+          reset(response.data.data);
+        }
+      } catch (error) {
+        toast.error("Failed to load product details");
+        router.push("/products");
+      } finally {
+        setIsLoadingProduct(false);
+      }
+    };
+    fetchProduct();
+  }, [isEdit, params.id, reset, router]);
+
   // Get available categories and room types - independent of each other
   const categoryOptions = CATEGORY_OPTIONS;
   const roomTypeOptions = ROOM_TYPE_OPTIONS;
 
   // Watch name field for auto-slug generation
   const watchedName = watch("name");
-  const watchedSlug = watch("slug");
-
+  
   // Slugify function to convert product name to URL-friendly slug
   const slugify = (text) => {
     if (!text) return "";
@@ -86,31 +101,72 @@ export default function ProductFormClient() {
       .replace(/^-+|-+$/g, "");
   };
 
-  // Auto-generate slug when product name changes
+  // Auto-generate slug when product name changes ONLY if not editing
   useEffect(() => {
-    if (watchedName) {
+    if (watchedName && !isEdit) {
       const generatedSlug = slugify(watchedName);
       setValue("slug", generatedSlug, { shouldDirty: true });
     }
-  }, [watchedName, setValue]);
+  }, [watchedName, isEdit, setValue]);
 
   const onSubmit = async (data) => {
     setIsSubmitting(true);
-    console.log(data);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      toast.success(
-        isEdit
-          ? "Product updated successfully!"
-          : "Product created successfully!",
-      );
+      // Create FormData from the form data
+      const formData = new FormData();
+      
+      Object.keys(data).forEach((key) => {
+        if (Array.isArray(data[key])) {
+          // For arrays (like images, tags, features), append each item
+          data[key].forEach((item) => {
+            formData.append(key, item);
+          });
+        } else if (typeof data[key] === "boolean") {
+          // Convert booleans to strings
+          formData.append(key, data[key].toString());
+        } else if (data[key] !== null && data[key] !== undefined) {
+          // Append standard fields
+          formData.append(key, data[key]);
+        }
+      });
+
+      console.log(formData)
+
+      const config = {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      };
+
+      if (isEdit) {
+        await axiosInstance.put(`/products/${params.id}`, formData, config);
+        toast.success("Product updated successfully!");
+      } else {
+        await axiosInstance.post("/products", formData, config);
+        toast.success("Product created successfully!");
+      }
       router.push("/products");
     } catch (error) {
-      toast.error("Something went wrong. Please try again.");
+      console.log(error)
+      toast.error(error.response?.data?.message || "Something went wrong. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (isLoadingProduct) {
+    return (
+      <AdminShell>
+        <div className="flex items-center justify-center min-h-[500px]">
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            <p className="text-gray-500 text-sm">Loading product details...</p>
+          </div>
+        </div>
+      </AdminShell>
+    );
+  }
+
 
   return (
     <AdminShell>
@@ -410,7 +466,7 @@ export default function ProductFormClient() {
               </h3>
               <div className="space-y-4">
                 <Controller
-                  name="isNew"
+                  name="isNewProduct"
                   control={control}
                   render={({ field }) => (
                     <Toggle

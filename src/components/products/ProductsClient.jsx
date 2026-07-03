@@ -1,7 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Filter, Edit, Trash2, Eye } from "lucide-react";
+import { Plus, Search, Filter, Edit, Trash2, Eye, Loader2 } from "lucide-react";
+import toast from "react-hot-toast";
+import axiosInstance from "@/lib/axiosInstance";
 import AdminShell from "@/components/layout/AdminShell";
 import {
   Table,
@@ -14,92 +16,7 @@ import {
 import TablePagination from "@/components/ui/TablePagination";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
-import { useTable } from "@/hooks/useTable";
 import Image from "next/image";
-
-// Demo product data
-const PRODUCTS = [
-  {
-    id: "PRD-001",
-    name: "Royal Floral 3D Wallpaper",
-    category: "Wallpaper",
-    price: 14000,
-    stock: 45,
-    status: "InStock",
-    image: "/categories/wallpaper.jpg",
-    addedDate: "2024-11-15",
-  },
-  {
-    id: "PRD-002",
-    name: "Ocean Blue Epoxy Floor",
-    category: "Epoxy Floor",
-    price: 40500,
-    stock: 12,
-    status: "LowStock",
-    image: "/categories/floor.jpg",
-    addedDate: "2024-10-20",
-  },
-  {
-    id: "PRD-003",
-    name: "Cloud Dream Ceiling Paper",
-    category: "Ceiling Paper",
-    stock: 78,
-    price: 14000,
-    status: "InStock",
-    image: "/categories/celingpaper.jpg",
-    addedDate: "2024-10-05",
-  },
-  {
-    id: "PRD-004",
-    name: "Golden Damask Wallpaper",
-    category: "Wallpaper",
-    price: 14000,
-    stock: 0,
-    status: "OutOfStock",
-    image: "/categories/wallpaper.jpg",
-    addedDate: "2024-09-18",
-  },
-  {
-    id: "PRD-005",
-    name: "Marble White Epoxy",
-    category: "Epoxy Floor",
-    price: 40500,
-    stock: 23,
-    status: "InStock",
-    image: "/categories/floor.jpg",
-    addedDate: "2024-09-01",
-  },
-  {
-    id: "PRD-006",
-    name: "Vintage Pink Wallpaper",
-    category: "Wallpaper",
-    price: 12500,
-    stock: 34,
-    status: "InStock",
-    image: "/categories/bedroom.jpg",
-    addedDate: "2024-08-22",
-  },
-  {
-    id: "PRD-007",
-    name: "Wooden Texture Epoxy",
-    category: "Epoxy Floor",
-    price: 38000,
-    stock: 5,
-    status: "LowStock",
-    image: "/categories/floor.jpg",
-    addedDate: "2024-08-10",
-  },
-  {
-    id: "PRD-008",
-    name: "Modern Geometric Wallpaper",
-    category: "Wallpaper",
-    price: 15000,
-    stock: 67,
-    status: "InStock",
-    image: "/categories/wallpaper.jpg",
-    addedDate: "2024-07-28",
-  },
-];
 
 const formatBDT = (n) => "৳" + Number(n).toLocaleString("en-IN");
 const formatDate = (d) =>
@@ -111,41 +28,75 @@ const formatDate = (d) =>
 
 export default function ProductsClient() {
   const router = useRouter();
+  
+  const [products, setProducts] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // API filters & pagination state
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortOrder, setSortOrder] = useState("desc");
+  
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
-  // Filter products
-  const filteredProducts = PRODUCTS.filter((product) => {
-    const matchesSearch =
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus =
-      filterStatus === "All" || product.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
+  const fetchProducts = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await axiosInstance.get("/products", {
+        params: {
+          page: currentPage,
+          limit: itemsPerPage,
+          search: searchTerm,
+          status: filterStatus,
+          sort: sortBy,
+          order: sortOrder
+        }
+      });
+      if (response.data?.success) {
+        setProducts(response.data.data);
+        setTotalItems(response.data.pagination.totalItems);
+        setTotalPages(response.data.pagination.totalPages);
+      }
+    } catch (error) {
+      toast.error("Failed to load products");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentPage, itemsPerPage, searchTerm, filterStatus, sortBy, sortOrder]);
 
-  // Table hook
-  const {
-    paginatedData,
-    sortBy,
-    sortOrder,
-    currentPage,
-    itemsPerPage,
-    totalPages,
-    setCurrentPage,
-    setItemsPerPage,
-    handleSort,
-  } = useTable({
-    data: filteredProducts,
-    initialSortBy: "name",
-    initialSortOrder: "asc",
-    initialItemsPerPage: 5,
-  });
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
   // Reset page when filter/search changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterStatus, setCurrentPage]);
+  }, [searchTerm, filterStatus]);
+
+  const handleSort = (key) => {
+    if (sortBy === key) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(key);
+      setSortOrder("asc");
+    }
+    setCurrentPage(1);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this product?")) return;
+    try {
+      await axiosInstance.delete(`/products/${id}`);
+      toast.success("Product deleted successfully");
+      fetchProducts();
+    } catch (error) {
+      toast.error("Failed to delete product");
+    }
+  };
 
   return (
     <AdminShell>
@@ -261,49 +212,80 @@ export default function ProductsClient() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedData.length > 0 ? (
-                paginatedData.map((product) => (
-                  <TableRow key={product.id}>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-12">
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                      <p className="text-gray-500 text-sm">Loading products...</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : products.length > 0 ? (
+                products.map((product) => (
+                  <TableRow key={product._id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <Image
-                          src={product.image}
-                          alt={product.name}
-                          width={40}
-                          height={40}
-                          className=" rounded-lg object-cover border border-gray-100"
-                        />
+                        {product.images && product.images.length > 0 ? (
+                          <Image
+                            src={product.images[0]}
+                            alt={product.name}
+                            width={40}
+                            height={40}
+                            className="rounded-lg object-cover border border-gray-100 min-w-[40px] h-[40px]"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center text-xs text-gray-400">
+                            N/A
+                          </div>
+                        )}
                         <div>
                           <div className="text-sm font-semibold text-gray-800">
                             {product.name}
                           </div>
                           <div className="text-xs font-mono text-gray-400">
-                            {product.id}
+                            {product.productId || product._id.substring(0,8)}
                           </div>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-gray-600">
-                        {product.category}
+                        {product.category || "Uncategorized"}
                       </span>
                     </TableCell>
                     <TableCell>
                       <span className="text-sm font-semibold text-gray-800">
-                        {formatBDT(product.price)}
+                        {formatBDT(product.pricePerSqft || 0)}
                       </span>
                     </TableCell>
-                    <TableCell>
-                      <span className="text-sm font-medium text-gray-700">
-                        {product.stock}
-                      </span>
-                    </TableCell>
+               <TableCell>  <div
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+        product.stock <= 10
+          ? 'bg-red-50 text-red-800 border-red-200 animate-pulse'
+          : product.stock < 20
+          ? 'bg-amber-50 text-amber-800 border-amber-200'
+          : 'bg-teal-50 text-teal-800 border-teal-200'
+      }`}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${
+          product.stock <=10
+            ? 'bg-red-600'
+            : product.stock <= 20
+            ? 'bg-amber-600'
+            : 'bg-teal-600'
+        }`}
+      />
+      {product.stock ?? 0} {product.stock === 1 ? 'unit' : 'units'}
+    </div>
+</TableCell>
                     <TableCell>
                       <Badge status={product.status} />
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-gray-500">
-                        {formatDate(product.addedDate)}
+                        {product.createdAt ? formatDate(product.createdAt) : "N/A"}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
@@ -311,14 +293,14 @@ export default function ProductsClient() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => router.push(`/products/${product.id}`)}
+                          onClick={() => router.push(`/products/${product._id}`)}
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => router.push(`/products/${product.id}`)}
+                          onClick={() => router.push(`/products/${product._id}/edit`)}
                         >
                           <Edit className="w-3.5 h-3.5" />
                         </Button>
@@ -326,6 +308,7 @@ export default function ProductsClient() {
                           variant="ghost"
                           size="sm"
                           className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => handleDelete(product._id)}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
@@ -348,7 +331,7 @@ export default function ProductsClient() {
             currentPage={currentPage}
             totalPages={totalPages}
             itemsPerPage={itemsPerPage}
-            totalItems={filteredProducts.length}
+            totalItems={totalItems}
             onPageChange={setCurrentPage}
             onItemsPerPageChange={(val) => {
               setItemsPerPage(val);

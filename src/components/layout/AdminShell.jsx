@@ -5,32 +5,36 @@ import AdminSidebar from "./AdminSidebar";
 import AdminTopbar from "./AdminTopbar";
 import AdminMobileNav from "./AdminMobileNav";
 
-// Helper to get initial sidebar state from localStorage
-const getInitialSidebarState = () => {
-  if (typeof window !== "undefined") {
+export default function AdminShell({ children }) {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isHoveringSidebar, setIsHoveringSidebar] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
     const saved = localStorage.getItem("sidebar-open");
     if (saved !== null) {
-      return saved === "true";
+      setIsSidebarOpen(saved === "true");
     }
-  }
-  return true; // Default to open if no saved state
-};
-
-export default function AdminShell({ children }) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(getInitialSidebarState);
-  const [isHoveringSidebar, setIsHoveringSidebar] = useState(false);
+  }, []);
 
   const effectiveSidebarOpen = isSidebarOpen || isHoveringSidebar;
 
   const toggleSidebar = () => {
-    setIsSidebarOpen((prev) => !prev);
+    setIsSidebarOpen((prev) => {
+      const newState = !prev;
+      localStorage.setItem("sidebar-open", newState.toString());
+      return newState;
+    });
     setIsHoveringSidebar(false);
   };
 
-  // Persist sidebar state in localStorage when it changes
+  // Persist sidebar state when updated outside of toggle (if any)
   useEffect(() => {
-    localStorage.setItem("sidebar-open", isSidebarOpen.toString());
-  }, [isSidebarOpen]);
+    if (isMounted) {
+      localStorage.setItem("sidebar-open", isSidebarOpen.toString());
+    }
+  }, [isSidebarOpen, isMounted]);
 
   return (
     <AuthGuard>
