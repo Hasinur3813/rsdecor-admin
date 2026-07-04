@@ -17,6 +17,8 @@ import TablePagination from "@/components/ui/TablePagination";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import Image from "next/image";
+import Toggle from "../ui/Toggle";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 const formatBDT = (n) => "৳" + Number(n).toLocaleString("en-IN");
 const formatDate = (d) =>
@@ -42,6 +44,8 @@ export default function ProductsClient() {
   
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, productId: null, isDeleting: false });
 
   const fetchProducts = useCallback(async () => {
     setIsLoading(true);
@@ -87,14 +91,43 @@ export default function ProductsClient() {
     setCurrentPage(1);
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this product?")) return;
+  const handleStatusChange = async (id, currentIsActive) => {
+    console.log(id, currentIsActive);
+    // If currentIsActive is undefined (older product), default it to true and toggle to false.
+    const currentActiveState = currentIsActive !== false;
+    const newActiveState = !currentActiveState;
+    
+    // Optimistic update
+    setProducts((prev) => 
+      prev.map((p) => (p._id === id ? { ...p, isActive: newActiveState } : p))
+    );
+
     try {
-      await axiosInstance.delete(`/products/${id}`);
+      await axiosInstance.patch(`/products/${id}`, { isActive: currentIsActive }, {});
+       fetchProducts(); 
+      toast.success(!newActiveState ? "Product activated" : "Product deactivated");
+    } catch (error) {
+      console.log(error)
+      toast.error("Failed to update status");
+      fetchProducts(); // Revert on failure
+    }
+  };
+
+  const handleDelete = (id) => {
+    setDeleteModal({ isOpen: true, productId: id, isDeleting: false });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteModal.productId) return;
+    setDeleteModal(prev => ({ ...prev, isDeleting: true }));
+    try {
+      await axiosInstance.delete(`/products/${deleteModal.productId}`);
       toast.success("Product deleted successfully");
       fetchProducts();
     } catch (error) {
       toast.error("Failed to delete product");
+    } finally {
+      setDeleteModal({ isOpen: false, productId: null, isDeleting: false });
     }
   };
 
@@ -279,9 +312,10 @@ export default function ProductsClient() {
       />
       {product.stock ?? 0} {product.stock === 1 ? 'unit' : 'units'}
     </div>
-</TableCell>
+                    </TableCell>
+                    {/* product status changing toggle */}
                     <TableCell>
-                      <Badge status={product.status} />
+                    <Toggle checked={product.isActive} onChange={(checked) => handleStatusChange(product._id, checked)} />
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-gray-500">
@@ -340,6 +374,16 @@ export default function ProductsClient() {
           />
         </div>
       </div>
+      
+      <ConfirmModal
+        isOpen={deleteModal.isOpen}
+        isLoading={deleteModal.isDeleting}
+        onClose={() => !deleteModal.isDeleting && setDeleteModal({ isOpen: false, productId: null, isDeleting: false })}
+        onConfirm={confirmDelete}
+        title="Delete Product"
+        message="Are you sure you want to delete this product? This action cannot be undone."
+        confirmText="Delete"
+      />
     </AdminShell>
   );
 }
