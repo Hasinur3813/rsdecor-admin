@@ -1,139 +1,155 @@
 "use client";
-import { useState, useRef } from "react";
+
+import { useRef, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import {
-  ArrowLeft,
-  Upload,
-  X,
-  Image as ImageIcon,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import Image from "next/image";
+import { useForm } from "react-hook-form";
+import { ArrowLeft, Upload, X, Loader2, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
 import AdminShell from "@/components/layout/AdminShell";
 import Button from "@/components/ui/Button";
-import { CATEGORIES, getCategoryById } from "@/lib/categories";
+import axiosInstance from "@/lib/axiosInstance";
+import { getApiErrorMessage } from "@/lib/getApiErrorMessage";
+import { getCategoryById } from "@/lib/categories";
 
 export default function CategoryFormClient() {
   const router = useRouter();
   const params = useParams();
   const isEdit = !!params.id;
   const fileInputRef = useRef(null);
-
-  // Initial form data
-  const initialData = isEdit
-    ? getCategoryById(params.id) || {
-        key: "",
-        title: "",
-        label: "",
-        description: "",
-        totalDesign: "",
-        image: "",
-        status: "Active",
-        items: [],
-      }
-    : {
-        key: "",
-        title: "",
-        label: "",
-        description: "",
-        totalDesign: "",
-        image: "",
-        status: "Active",
-        items: [],
-      };
-
-  const [formData, setFormData] = useState(initialData);
-  const [imagePreview, setImagePreview] = useState(initialData.image);
+  const [selectedFile, setSelectedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }));
+  const editCategory = isEdit ? getCategoryById(params.id) : null;
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm({
+    defaultValues: isEdit
+      ? {
+          key: editCategory?.key || "",
+          title: editCategory?.title || "",
+          label: editCategory?.label || "",
+          description: editCategory?.description || "",
+          status: editCategory?.status || "Active",
+          image: editCategory?.image || "",
+        }
+      : {
+          key: "",
+          title: "",
+          label: "",
+          description: "",
+          status: "Active",
+          image: "",
+        },
+  });
+
+  const imagePreview = watch("image");
+
+  const processFile = (file) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select a valid image file");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image size must be less than 5MB");
+      return;
+    }
+
+    setSelectedFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setValue("image", reader.result, { shouldValidate: true });
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      if (!file.type.startsWith("image/")) {
-        toast.error("Please select a valid image file");
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("Image size must be less than 5MB");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result);
-        setFormData((prev) => ({
-          ...prev,
-          image: reader.result,
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
+    if (file) processFile(file);
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file) {
-      if (!file.type.startsWith("image/")) {
-        toast.error("Please select a valid image file");
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("Image size must be less than 5MB");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result);
-        setFormData((prev) => ({
-          ...prev,
-          image: reader.result,
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
+    if (file) processFile(file);
   };
 
   const clearImage = () => {
-    setImagePreview("");
-    setFormData((prev) => ({ ...prev, image: "" }));
+    setValue("image", "", { shouldValidate: true });
+    setSelectedFile(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    console.log("Submitting category:", formData);
-    if (typeof toast !== "undefined") {
-      toast.success(isEdit ? "Category updated!" : "Category created!");
+  const applyServerErrors = (message) => {
+    const lower = message.toLowerCase();
+
+    if (lower.includes("key")) {
+      setError("key", { type: "server", message });
     }
-    router.push("/categories");
+    if (lower.includes("title")) {
+      setError("title", { type: "server", message });
+    }
+    if (lower.includes("image")) {
+      setError("image", { type: "server", message });
+    }
+  };
+
+  const onSubmit = async (data) => {
+    setSubmitError("");
+
+    if (isEdit) {
+      toast.success("Category updated!");
+      router.push("/categories");
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("key", data.key.trim().toLowerCase());
+      formData.append("title", data.title.trim());
+      formData.append("label", data.label?.trim() || "");
+      formData.append("description", data.description?.trim() || "");
+      formData.append("status", data.status || "Active");
+
+      if (selectedFile) {
+        formData.append("image", selectedFile);
+      }
+
+      const response = await axiosInstance.post("/categories", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (response.data?.success) {
+        toast.success(
+          response.data.message || "Category created successfully!",
+        );
+        router.push("/categories");
+      }
+    } catch (error) {
+      const message = getApiErrorMessage(
+        error,
+        "Failed to create category. Please try again.",
+      );
+
+      setSubmitError(message);
+      toast.error(message);
+      applyServerErrors(message);
+    }
   };
 
   return (
     <AdminShell>
       <div className="flex flex-col gap-6 p-6">
-        {/* Page Header */}
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -154,11 +170,17 @@ export default function CategoryFormClient() {
           </div>
         </div>
 
+        {submitError && (
+          <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-red-700">
+            <AlertCircle className="w-5 h-5 shrink-0" />
+            <span>{submitError}</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Main Form */}
           <div className="lg:col-span-1 flex flex-col gap-6">
             <form
-              onSubmit={handleSubmit}
+              onSubmit={handleSubmit(onSubmit)}
               className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6"
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -168,57 +190,66 @@ export default function CategoryFormClient() {
                   </label>
                   <input
                     type="text"
-                    name="key"
-                    value={formData.key}
-                    onChange={handleChange}
                     placeholder="e.g., wallpapers"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    required
+                    className={`w-full px-4 py-3 rounded-xl border text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all ${
+                      errors.key
+                        ? "border-red-400 bg-red-50"
+                        : "border-gray-200"
+                    }`}
+                    {...register("key", {
+                      required: "Category key is required",
+                      pattern: {
+                        value: /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+                        message:
+                          "Use lowercase letters, numbers, and hyphens only",
+                      },
+                    })}
                   />
+                  {errors.key && (
+                    <p className="text-xs text-red-500 mt-1">
+                      {errors.key.message}
+                    </p>
+                  )}
                 </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-800 mb-2">
                     Title <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
-                    name="title"
-                    value={formData.title}
-                    onChange={handleChange}
                     placeholder="e.g., Wallpapers"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    required
+                    className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all ${
+                      errors.title
+                        ? "border-red-400 bg-red-50"
+                        : "border-gray-200"
+                    }`}
+                    {...register("title", {
+                      required: "Title is required",
+                      minLength: {
+                        value: 2,
+                        message: "Title must be at least 2 characters",
+                      },
+                    })}
                   />
+                  {errors.title && (
+                    <p className="text-xs text-red-500 mt-1">
+                      {errors.title.message}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-800 mb-2">
-                    Label
-                  </label>
-                  <input
-                    type="text"
-                    name="label"
-                    value={formData.label}
-                    onChange={handleChange}
-                    placeholder="e.g., New Arrivals"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-800 mb-2">
-                    Total Designs
-                  </label>
-                  <input
-                    type="text"
-                    name="totalDesign"
-                    value={formData.totalDesign}
-                    onChange={handleChange}
-                    placeholder="e.g., 120"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-800 mb-2">
+                  Label
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., New Arrivals"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  {...register("label")}
+                />
               </div>
 
               <div>
@@ -226,14 +257,19 @@ export default function CategoryFormClient() {
                   Description
                 </label>
                 <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
                   placeholder="Enter category description..."
                   rows={3}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none"
+                  {...register("description")}
                 />
               </div>
+
+              {!isEdit && (
+                <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                  Total designs are calculated automatically from products when
+                  subcategories are added.
+                </p>
+              )}
 
               {isEdit && (
                 <div>
@@ -241,10 +277,8 @@ export default function CategoryFormClient() {
                     Status
                   </label>
                   <select
-                    name="status"
-                    value={formData.status}
-                    onChange={handleChange}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    {...register("status")}
                   >
                     <option value="Active">Active</option>
                     <option value="Inactive">Inactive</option>
@@ -252,14 +286,33 @@ export default function CategoryFormClient() {
                 </div>
               )}
 
+              <input
+                type="hidden"
+                {...register("image", {
+                  validate: () =>
+                    selectedFile || imagePreview
+                      ? true
+                      : "Category image is required",
+                })}
+              />
+              {errors.image && (
+                <p className="text-xs text-red-500">{errors.image.message}</p>
+              )}
+
               <div className="flex flex-wrap gap-3 pt-4">
-                <Button type="submit">
-                  {isEdit ? "Update Category" : "Create Category"}
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {isEdit
+                    ? "Update Category"
+                    : isSubmitting
+                      ? "Creating…"
+                      : "Create Category"}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => router.push("/categories")}
                   type="button"
+                  disabled={isSubmitting}
                 >
                   Cancel
                 </Button>
@@ -267,23 +320,29 @@ export default function CategoryFormClient() {
             </form>
           </div>
 
-          {/* Image Upload */}
           <div className="lg:col-span-1 flex flex-col gap-6">
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <h3 className="text-sm font-semibold text-gray-800 mb-4">
-                Category Image
+                Category Image <span className="text-red-500">*</span>
               </h3>
 
               {!imagePreview ? (
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                  }}
                   onDrop={handleDrop}
-                  className={`
-                    border-2 border-dashed rounded-xl p-8 cursor-pointer transition-all text-center
-                    ${isDragging ? "border-primary bg-primary/5" : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"}
-                  `}
+                  className={`border-2 border-dashed rounded-xl p-8 cursor-pointer transition-all text-center ${
+                    isDragging
+                      ? "border-primary bg-primary/5"
+                      : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
+                  }`}
                 >
                   <div className="w-12 h-12 mx-auto rounded-full bg-primary/10 flex items-center justify-center mb-4">
                     <Upload className="w-6 h-6 text-primary" />
@@ -297,14 +356,21 @@ export default function CategoryFormClient() {
                 </div>
               ) : (
                 <div className="relative">
-                  <div className="aspect-video rounded-xl overflow-hidden border border-gray-200">
-                    <img
+                  <div className="relative aspect-video rounded-xl overflow-hidden border border-gray-200">
+                    <Image
                       src={imagePreview}
-                      alt="Preview"
-                      className="w-full h-full object-cover"
+                      alt="Category preview"
+                      fill
+                      sizes="(max-width: 1024px) 100vw, 50vw"
+                      className="object-cover"
+                      unoptimized={
+                        imagePreview.startsWith("data:") ||
+                        imagePreview.startsWith("blob:")
+                      }
                     />
                   </div>
                   <button
+                    type="button"
                     onClick={clearImage}
                     className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 text-gray-600 hover:text-red-500 hover:bg-white shadow-sm flex items-center justify-center transition-all"
                   >

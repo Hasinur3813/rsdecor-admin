@@ -5,6 +5,7 @@ export const CATEGORIES = [
     key: "wallpapers",
     title: "Wallpapers",
     status: "Active",
+    totalDesign: "3433",
     createdAt: "2024-11-01",
     items: [
       {
@@ -61,6 +62,7 @@ export const CATEGORIES = [
     id: "CAT-002",
     key: "flooring",
     title: "Flooring",
+        totalDesign: "3433",
     status: "Active",
     createdAt: "2024-11-05",
     items: [

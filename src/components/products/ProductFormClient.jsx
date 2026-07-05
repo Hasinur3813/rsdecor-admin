@@ -193,7 +193,10 @@ export default function ProductFormClient() {
         </div>
 
         <form
-          onSubmit={handleSubmit(onSubmit)}
+          onSubmit={handleSubmit(onSubmit, (errors) => {
+            console.log("Validation Errors:", errors);
+            toast.error("Please fill in all required fields correctly.");
+          })}
           className="grid grid-cols-1 lg:grid-cols-3 gap-6"
         >
           {/* Left Column - Main Info */}
@@ -237,18 +240,28 @@ export default function ProductFormClient() {
                 <Controller
                   name="description"
                   control={control}
-                  render={({ field }) => (
-                    <>
+                  rules={{ required: "Description is required" }}
+                  render={({ field, fieldState }) => (
+                    <div>
                       <label className="block text-sm font-semibold text-gray-800 mb-1.5">
-                        Description
+                        Description <span className="text-red-500">*</span>
                       </label>
                       <textarea
                         {...field}
                         placeholder="Enter product description..."
                         rows={4}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none"
+                        className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-1 transition-all resize-none ${
+                          fieldState.error
+                            ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                            : "border-gray-200 focus:border-primary focus:ring-primary"
+                        }`}
                       />
-                    </>
+                      {fieldState.error && (
+                        <p className="mt-1.5 text-xs text-red-500 font-medium">
+                          {fieldState.error.message}
+                        </p>
+                      )}
+                    </div>
                   )}
                 />
               </div>
@@ -279,11 +292,14 @@ export default function ProductFormClient() {
                 <Controller
                   name="roomType"
                   control={control}
-                  render={({ field }) => (
+                  rules={{ required: "Room Type is required" }}
+                  render={({ field, fieldState }) => (
                     <Select
                       label="Room Type"
                       {...field}
                       options={roomTypeOptions}
+                      error={fieldState.error?.message}
+                      required
                       placeholder="Select room type"
                     />
                   )}
@@ -291,44 +307,56 @@ export default function ProductFormClient() {
                 <Controller
                   name="material"
                   control={control}
-                  render={({ field }) => (
+                  rules={{ required: "Material is required" }}
+                  render={({ field, fieldState }) => (
                     <Select
                       label="Material"
                       {...field}
                       options={MATERIAL_OPTIONS}
+                      error={fieldState.error?.message}
+                      required
                     />
                   )}
                 />
                 <Controller
                   name="finish"
                   control={control}
-                  render={({ field }) => (
+                  rules={{ required: "Finish is required" }}
+                  render={({ field, fieldState }) => (
                     <Select
                       label="Finish"
                       {...field}
                       options={FINISH_OPTIONS}
+                      error={fieldState.error?.message}
+                      required
                     />
                   )}
                 />
                 <Controller
                   name="colorFamily"
                   control={control}
-                  render={({ field }) => (
+                  rules={{ required: "Color Family is required" }}
+                  render={({ field, fieldState }) => (
                     <Select
                       label="Color Family"
                       {...field}
                       options={COLOR_FAMILY_OPTIONS}
+                      error={fieldState.error?.message}
+                      required
                     />
                   )}
                 />
                 <Controller
                   name="warranty"
                   control={control}
-                  render={({ field }) => (
+                  rules={{ required: "Warranty is required" }}
+                  render={({ field, fieldState }) => (
                     <Select
                       label="Warranty"
                       {...field}
                       options={WARRANTY_OPTIONS}
+                      error={fieldState.error?.message}
+                      required
                     />
                   )}
                 />
@@ -337,14 +365,22 @@ export default function ProductFormClient() {
                 <Controller
                   name="features"
                   control={control}
-                  render={({ field }) => (
-                    <MultiSelect
-                      label="Features"
-                      options={FEATURES_OPTIONS}
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder="Select product features"
-                    />
+                  rules={{ validate: (v) => v?.length > 0 || "Please select at least one feature" }}
+                  render={({ field, fieldState }) => (
+                    <div className="relative">
+                      <MultiSelect
+                        label={<span>Features <span className="text-red-500">*</span></span>}
+                        options={FEATURES_OPTIONS}
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Select product features"
+                      />
+                      {fieldState.error && (
+                        <p className="mt-1.5 text-xs text-red-500 font-medium">
+                          {fieldState.error.message}
+                        </p>
+                      )}
+                    </div>
                   )}
                 />
               </div>
@@ -376,11 +412,14 @@ export default function ProductFormClient() {
                 <Controller
                   name="stock"
                   control={control}
-                  render={({ field }) => (
+                  rules={{ required: "Stock is required" }}
+                  render={({ field, fieldState }) => (
                     <Input
                       label="Stock Quantity"
                       type="number"
                       {...field}
+                      error={fieldState.error?.message}
+                      required
                       placeholder="e.g., 45"
                     />
                   )}
@@ -390,10 +429,13 @@ export default function ProductFormClient() {
                 <Controller
                   name="status"
                   control={control}
-                  render={({ field }) => (
+                  rules={{ required: "Status is required" }}
+                  render={({ field, fieldState }) => (
                     <Select
                       label="Status"
                       {...field}
+                      error={fieldState.error?.message}
+                      required
                       options={[
                         { label: "In Stock", value: "InStock" },
                         { label: "Low Stock", value: "LowStock" },
@@ -410,13 +452,21 @@ export default function ProductFormClient() {
               <Controller
                 name="tags"
                 control={control}
-                render={({ field }) => (
-                  <TagsInput
-                    label="Tags"
-                    tags={field.value}
-                    onChange={field.onChange}
-                    placeholder="Type and press Space to add tags"
-                  />
+                rules={{ validate: (v) => v?.length > 0 || "Please add at least one tag" }}
+                render={({ field, fieldState }) => (
+                  <div>
+                    <TagsInput
+                      label={<span>Tags <span className="text-red-500">*</span></span>}
+                      tags={field.value}
+                      onChange={field.onChange}
+                      placeholder="Type and press Space to add tags"
+                    />
+                    {fieldState.error && (
+                      <p className="mt-1.5 text-xs text-red-500 font-medium">
+                        {fieldState.error.message}
+                      </p>
+                    )}
+                  </div>
                 )}
               />
             </div>
@@ -448,10 +498,13 @@ export default function ProductFormClient() {
                 <Controller
                   name="imageAlt"
                   control={control}
-                  render={({ field }) => (
+                  rules={{ required: "Image Alt Text is required" }}
+                  render={({ field, fieldState }) => (
                     <Input
                       label="Image Alt Text"
                       {...field}
+                      error={fieldState.error?.message}
+                      required
                       placeholder="Describe the main image"
                     />
                   )}
