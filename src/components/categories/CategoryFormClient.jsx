@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
 import { useForm } from "react-hook-form";
@@ -8,20 +8,31 @@ import { ArrowLeft, Upload, X, Loader2, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
 import AdminShell from "@/components/layout/AdminShell";
 import Button from "@/components/ui/Button";
-import axiosInstance from "@/lib/axiosInstance";
-import { getApiErrorMessage } from "@/lib/getApiErrorMessage";
-import { getCategoryById } from "@/lib/categories";
+import {
+  fetchCategoryById,
+  createCategory,
+  updateCategory,
+} from "@/lib/categories";
+
+// Helper function to get API error messages
+const getApiErrorMessage = (
+  error,
+  fallbackMessage = "Something went wrong",
+) => {
+  return error?.response?.data?.message || error?.message || fallbackMessage;
+};
 
 export default function CategoryFormClient() {
   const router = useRouter();
   const params = useParams();
   const isEdit = !!params.id;
   const fileInputRef = useRef(null);
+
   const [selectedFile, setSelectedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [submitError, setSubmitError] = useState("");
-
-  const editCategory = isEdit ? getCategoryById(params.id) : null;
+  const [loadingCategory, setLoadingCategory] = useState(isEdit);
+  const [category, setCategory] = useState(null);
 
   const {
     register,
@@ -29,28 +40,47 @@ export default function CategoryFormClient() {
     watch,
     setValue,
     setError,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm({
-    defaultValues: isEdit
-      ? {
-          key: editCategory?.key || "",
-          title: editCategory?.title || "",
-          label: editCategory?.label || "",
-          description: editCategory?.description || "",
-          status: editCategory?.status || "Active",
-          image: editCategory?.image || "",
-        }
-      : {
-          key: "",
-          title: "",
-          label: "",
-          description: "",
-          status: "Active",
-          image: "",
-        },
+    defaultValues: {
+      key: "",
+      title: "",
+      label: "",
+      description: "",
+      status: "Active",
+      image: "",
+    },
   });
 
   const imagePreview = watch("image");
+
+  // Fetch category data for edit mode
+  useEffect(() => {
+    if (isEdit) {
+      const loadCategory = async () => {
+        try {
+          const data = await fetchCategoryById(params.id);
+          const cat = data.data;
+          setCategory(cat);
+          reset({
+            key: cat.key || "",
+            title: cat.title || "",
+            label: cat.label || "",
+            description: cat.description || "",
+            status: cat.status || "Active",
+            image: cat.image || "",
+          });
+        } catch (err) {
+          toast.error(getApiErrorMessage(err, "Failed to load category"));
+          router.push("/categories");
+        } finally {
+          setLoadingCategory(false);
+        }
+      };
+      loadCategory();
+    }
+  }, [isEdit, params.id, reset, router]);
 
   const processFile = (file) => {
     if (!file.type.startsWith("image/")) {
@@ -107,12 +137,6 @@ export default function CategoryFormClient() {
   const onSubmit = async (data) => {
     setSubmitError("");
 
-    if (isEdit) {
-      toast.success("Category updated!");
-      router.push("/categories");
-      return;
-    }
-
     try {
       const formData = new FormData();
       formData.append("key", data.key.trim().toLowerCase());
@@ -125,20 +149,28 @@ export default function CategoryFormClient() {
         formData.append("image", selectedFile);
       }
 
-      const response = await axiosInstance.post("/categories", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      let response;
+      if (isEdit) {
+        response = await updateCategory(params.id, formData);
+      } else {
+        response = await createCategory(formData);
+      }
 
-      if (response.data?.success) {
+      if (response?.success) {
         toast.success(
-          response.data.message || "Category created successfully!",
+          response.message ||
+            (isEdit
+              ? "Category updated successfully!"
+              : "Category created successfully!"),
         );
         router.push("/categories");
       }
     } catch (error) {
       const message = getApiErrorMessage(
         error,
-        "Failed to create category. Please try again.",
+        isEdit
+          ? "Failed to update category. Please try again."
+          : "Failed to create category. Please try again.",
       );
 
       setSubmitError(message);
@@ -146,6 +178,16 @@ export default function CategoryFormClient() {
       applyServerErrors(message);
     }
   };
+
+  if (loadingCategory) {
+    return (
+      <AdminShell>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AdminShell>
+    );
+  }
 
   return (
     <AdminShell>
@@ -264,26 +306,24 @@ export default function CategoryFormClient() {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-semibold text-gray-800 mb-2">
+                  Status
+                </label>
+                <select
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  {...register("status")}
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </div>
+
               {!isEdit && (
                 <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
                   Total designs are calculated automatically from products when
                   subcategories are added.
                 </p>
-              )}
-
-              {isEdit && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-800 mb-2">
-                    Status
-                  </label>
-                  <select
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                    {...register("status")}
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
-                </div>
               )}
 
               <input
@@ -301,9 +341,13 @@ export default function CategoryFormClient() {
 
               <div className="flex flex-wrap gap-3 pt-4">
                 <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {isSubmitting && (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  )}
                   {isEdit
-                    ? "Update Category"
+                    ? isSubmitting
+                      ? "Updating…"
+                      : "Update Category"
                     : isSubmitting
                       ? "Creating…"
                       : "Create Category"}

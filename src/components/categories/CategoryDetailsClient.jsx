@@ -1,6 +1,8 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import Image from "next/image";
 import {
   ArrowLeft,
   Edit,
@@ -8,29 +10,80 @@ import {
   Layers,
   Image as ImageIcon,
   Plus,
+  Loader2,
 } from "lucide-react";
 import AdminShell from "@/components/layout/AdminShell";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
-import { CATEGORIES, formatDate, getCategoryById } from "@/lib/categories";
+import {
+  fetchCategoryById,
+  deleteCategory,
+  formatDate,
+} from "@/lib/categories";
+import toast from "react-hot-toast";
 
 export default function CategoryDetailsClient() {
   const router = useRouter();
   const params = useParams();
+  const [category, setCategory] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
-  // Find category by id
-  const category = getCategoryById(params.id);
+  // Fetch category details
+  const loadCategory = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchCategoryById(params.id);
+      setCategory(data.data);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to load category");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  if (!category) {
+  useEffect(() => {
+    if (params.id) {
+      setTimeout(() => loadCategory(), 0);
+    }
+  }, [params.id]);
+
+  // Handle delete
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this category?")) return;
+    setDeleting(true);
+    try {
+      await deleteCategory(params.id);
+      toast.success("Category deleted successfully");
+      router.push("/categories");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to delete category");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <AdminShell>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AdminShell>
+    );
+  }
+
+  if (error || !category) {
     return (
       <AdminShell>
         <div className="p-6">
           <div className="text-center py-12">
             <h2 className="text-xl font-semibold text-gray-800">
-              Category Not Found
+              {error || "Category Not Found"}
             </h2>
             <p className="text-gray-500 mt-2">
-              The category you're looking for doesn't exist.
+              The category you&apos;re looking for doesn&apos;t exist.
             </p>
             <Button className="mt-4" onClick={() => router.push("/categories")}>
               Back to Categories
@@ -74,8 +127,14 @@ export default function CategoryDetailsClient() {
             <Button
               variant="ghost"
               className="text-red-500 hover:text-red-600 hover:bg-red-50"
+              onClick={handleDelete}
+              disabled={deleting}
             >
-              <Trash2 className="w-4 h-4" />
+              {deleting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
             </Button>
           </div>
         </div>
@@ -86,11 +145,12 @@ export default function CategoryDetailsClient() {
             {/* Hero Image */}
             {category.image && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="aspect-video bg-gray-100">
-                  <img
+                <div className="aspect-video bg-gray-100 relative">
+                  <Image
                     src={category.image}
                     alt={category.title}
-                    className="w-full h-full object-cover"
+                    fill
+                    className="object-cover"
                   />
                 </div>
               </div>
@@ -128,7 +188,7 @@ export default function CategoryDetailsClient() {
                   </div>
                 )}
 
-                {category.totalDesign && (
+                {category.totalDesign !== undefined && (
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center">
                       <Layers className="w-5 h-5 text-purple-600" />
@@ -199,12 +259,13 @@ export default function CategoryDetailsClient() {
                       className="p-4 border border-gray-100 rounded-xl hover:border-primary/30 hover:bg-primary/5 cursor-pointer transition-all"
                     >
                       <div className="flex items-start gap-3">
-                        <div className="w-16 h-12 rounded-lg bg-gray-100 overflow-hidden shrink-0">
+                        <div className="w-16 h-12 rounded-lg bg-gray-100 overflow-hidden shrink-0 relative">
                           {item.image ? (
-                            <img
+                            <Image
                               src={item.image}
                               alt={item.label}
-                              className="w-full h-full object-cover"
+                              fill
+                              className="object-cover"
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-gray-400">
@@ -216,7 +277,7 @@ export default function CategoryDetailsClient() {
                           <h4 className="font-medium text-gray-900 text-sm">
                             {item.label}
                           </h4>
-                          {item.totalDesign && (
+                          {item.totalDesign !== undefined && (
                             <p className="text-xs text-gray-500 mt-1">
                               {item.totalDesign} designs
                             </p>

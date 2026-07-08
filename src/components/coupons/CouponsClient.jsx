@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -11,7 +11,10 @@ import {
   Tag,
   CheckCircle,
   Clock,
+  Loader2,
 } from "lucide-react";
+import toast from "react-hot-toast";
+import axiosInstance from "@/lib/axiosInstance";
 import AdminShell from "@/components/layout/AdminShell";
 import {
   Table,
@@ -24,63 +27,114 @@ import {
 import TablePagination from "@/components/ui/TablePagination";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
-import { useTable } from "@/hooks/useTable";
-import { COUPONS, formatDate, formatBDT } from "@/lib/coupons";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
-// Calculate stats
-const getCouponStats = (coupons) => {
-  const totalCoupons = coupons.length;
-  const activeCoupons = coupons.filter((c) => c.status === "Active").length;
-  const totalUsage = coupons.reduce((sum, c) => sum + c.usedCount, 0);
-  return { totalCoupons, activeCoupons, totalUsage };
-};
+const formatDate = (d) =>
+  new Date(d).toLocaleDateString("en-BD", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+const formatBDT = (n) => "৳" + Number(n).toLocaleString("en-IN");
 
 export default function CouponsClient() {
   const router = useRouter();
+
+  const [coupons, setCoupons] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // API filters & pagination state
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortOrder, setSortOrder] = useState("desc");
 
-  // Filter coupons
-  const filteredCoupons = COUPONS.filter((coupon) => {
-    const matchesSearch =
-      coupon.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      coupon.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      coupon.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus =
-      filterStatus === "All" || coupon.status === filterStatus;
-    return matchesSearch && matchesStatus;
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    couponId: null,
+    isDeleting: false,
   });
 
-  // Table hook
-  const {
-    paginatedData,
-    sortBy,
-    sortOrder,
-    currentPage,
-    itemsPerPage,
-    totalPages,
-    setCurrentPage,
-    setItemsPerPage,
-    handleSort,
-  } = useTable({
-    data: filteredCoupons,
-    initialSortBy: "id",
-    initialSortOrder: "desc",
-    initialItemsPerPage: 5,
-  });
+  const fetchCoupons = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await axiosInstance.get("/coupons", {
+        params: {
+          page: currentPage,
+          limit: itemsPerPage,
+          search: searchTerm,
+          status: filterStatus,
+          sort: sortBy,
+          order: sortOrder,
+        },
+      });
+      if (response.data?.success) {
+        setCoupons(response.data.data);
+        setTotalItems(response.data.pagination.totalItems);
+        setTotalPages(response.data.pagination.totalPages);
+      }
+    } catch (error) {
+      toast.error("Failed to load coupons");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentPage, itemsPerPage, searchTerm, filterStatus, sortBy, sortOrder]);
+
+  useEffect(() => {
+    setTimeout(() => fetchCoupons(), 0);
+  }, [fetchCoupons]);
 
   // Reset page when filter/search changes
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, filterStatus, setCurrentPage]);
+    setTimeout(() => setCurrentPage(1), 0);
+  }, [searchTerm, filterStatus]);
 
-  const stats = getCouponStats(filteredCoupons);
+  const handleSort = (key) => {
+    if (sortBy === key) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(key);
+      setSortOrder("asc");
+    }
+    setCurrentPage(1);
+  };
+
+  const handleDelete = (id) => {
+    setDeleteModal({ isOpen: true, couponId: id, isDeleting: false });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteModal.couponId) return;
+    setDeleteModal((prev) => ({ ...prev, isDeleting: true }));
+    try {
+      await axiosInstance.delete(`/coupons/${deleteModal.couponId}`);
+      toast.success("Coupon deleted successfully");
+      fetchCoupons();
+    } catch (error) {
+      toast.error("Failed to delete coupon");
+    } finally {
+      setDeleteModal({ isOpen: false, couponId: null, isDeleting: false });
+    }
+  };
 
   const getDiscountDisplay = (coupon) => {
     if (coupon.type === "percentage") {
       return `${coupon.value}% OFF`;
     }
     return formatBDT(coupon.value);
+  };
+
+  // Calculate stats
+  const stats = {
+    totalCoupons: totalItems,
+    activeCoupons: coupons.filter((c) => c.status === "Active").length,
+    totalUsage: coupons.reduce((sum, c) => sum + (c.usedCount || 0), 0),
   };
 
   return (
@@ -192,15 +246,6 @@ export default function CouponsClient() {
               <TableRow>
                 <TableHead
                   sortable
-                  sortKey="id"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
-                  onSort={handleSort}
-                >
-                  ID
-                </TableHead>
-                <TableHead
-                  sortable
                   sortKey="code"
                   sortBy={sortBy}
                   sortOrder={sortOrder}
@@ -248,14 +293,20 @@ export default function CouponsClient() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedData.length > 0 ? (
-                paginatedData.map((coupon) => (
-                  <TableRow key={coupon.id}>
-                    <TableCell>
-                      <span className="font-mono text-sm font-semibold text-gray-700">
-                        {coupon.id}
-                      </span>
-                    </TableCell>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-12">
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                      <p className="text-gray-500 text-sm">
+                        Loading coupons...
+                      </p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : coupons.length > 0 ? (
+                coupons.map((coupon) => (
+                  <TableRow key={coupon._id}>
                     <TableCell>
                       <div className="flex flex-col min-w-0">
                         <span className="text-sm font-bold text-primary font-mono">
@@ -273,7 +324,7 @@ export default function CouponsClient() {
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-gray-800">
-                        {coupon.usedCount} / {coupon.usageLimit}
+                        {coupon.usedCount || 0} / {coupon.usageLimit}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -289,7 +340,7 @@ export default function CouponsClient() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => router.push(`/coupons/${coupon.id}`)}
+                          onClick={() => router.push(`/coupons/${coupon._id}`)}
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </Button>
@@ -297,7 +348,7 @@ export default function CouponsClient() {
                           variant="ghost"
                           size="sm"
                           onClick={() =>
-                            router.push(`/coupons/${coupon.id}/edit`)
+                            router.push(`/coupons/${coupon._id}/edit`)
                           }
                         >
                           <Edit className="w-3.5 h-3.5" />
@@ -306,6 +357,7 @@ export default function CouponsClient() {
                           variant="ghost"
                           size="sm"
                           className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => handleDelete(coupon._id)}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
@@ -315,7 +367,7 @@ export default function CouponsClient() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12">
+                  <TableCell colSpan={6} className="text-center py-12">
                     <div className="text-gray-400 text-sm">
                       No coupons found
                     </div>
@@ -328,7 +380,7 @@ export default function CouponsClient() {
             currentPage={currentPage}
             totalPages={totalPages}
             itemsPerPage={itemsPerPage}
-            totalItems={filteredCoupons.length}
+            totalItems={totalItems}
             onPageChange={setCurrentPage}
             onItemsPerPageChange={(val) => {
               setItemsPerPage(val);
@@ -337,6 +389,19 @@ export default function CouponsClient() {
           />
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={deleteModal.isOpen}
+        isLoading={deleteModal.isDeleting}
+        onClose={() =>
+          !deleteModal.isDeleting &&
+          setDeleteModal({ isOpen: false, couponId: null, isDeleting: false })
+        }
+        onConfirm={confirmDelete}
+        title="Delete Coupon"
+        message="Are you sure you want to delete this coupon? This action cannot be undone."
+        confirmText="Delete"
+      />
     </AdminShell>
   );
 }

@@ -1,11 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft, Tag } from "lucide-react";
+import { ArrowLeft, Tag, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
+import axiosInstance from "@/lib/axiosInstance";
 import AdminShell from "@/components/layout/AdminShell";
 import Button from "@/components/ui/Button";
-import { COUPONS, getCouponById } from "@/lib/coupons";
 
 export default function CouponFormClient() {
   const router = useRouter();
@@ -13,33 +13,59 @@ export default function CouponFormClient() {
   const isEdit = !!params.id;
 
   // Initial form data
-  const initialData = isEdit
-    ? getCouponById(params.id) || {
-        code: "",
-        type: "percentage",
-        value: "",
-        minOrder: "",
-        maxDiscount: "",
-        usageLimit: "",
-        status: "Active",
-        startDate: "",
-        endDate: "",
-        description: "",
-      }
-    : {
-        code: "",
-        type: "percentage",
-        value: "",
-        minOrder: "",
-        maxDiscount: "",
-        usageLimit: "",
-        status: "Active",
-        startDate: "",
-        endDate: "",
-        description: "",
-      };
+  const initialData = {
+    code: "",
+    type: "percentage",
+    value: "",
+    minOrder: "",
+    maxDiscount: "",
+    usageLimit: "",
+    status: "Active",
+    startDate: "",
+    endDate: "",
+    description: "",
+  };
 
   const [formData, setFormData] = useState(initialData);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fetch coupon if editing
+  useEffect(() => {
+    if (isEdit) {
+      const fetchCoupon = async () => {
+        try {
+          const response = await axiosInstance.get(`/coupons/${params.id}`);
+          if (response.data?.success) {
+            const coupon = response.data.data;
+            setFormData({
+              code: coupon.code || "",
+              type: coupon.type || "percentage",
+              value: coupon.value || "",
+              minOrder: coupon.minOrder || "",
+              maxDiscount: coupon.maxDiscount || "",
+              usageLimit: coupon.usageLimit || "",
+              status: coupon.status || "Active",
+              startDate: coupon.startDate
+                ? new Date(coupon.startDate).toISOString().split("T")[0]
+                : "",
+              endDate: coupon.endDate
+                ? new Date(coupon.endDate).toISOString().split("T")[0]
+                : "",
+              description: coupon.description || "",
+            });
+          }
+        } catch (error) {
+          toast.error("Failed to load coupon");
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchCoupon();
+    } else {
+      setIsLoading(false);
+    }
+  }, [isEdit, params.id]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -49,15 +75,37 @@ export default function CouponFormClient() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Submitting coupon:", formData);
-    // Show success toast
-    if (typeof toast !== "undefined") {
-      toast.success(isEdit ? "Coupon updated!" : "Coupon created!");
+    setIsSubmitting(true);
+    try {
+      if (isEdit) {
+        await axiosInstance.put(`/coupons/${params.id}`, formData);
+        toast.success("Coupon updated successfully!");
+      } else {
+        await axiosInstance.post("/coupons", formData);
+        toast.success("Coupon created successfully!");
+      }
+      router.push("/coupons");
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          `Failed to ${isEdit ? "update" : "create"} coupon`
+      );
+    } finally {
+      setIsSubmitting(false);
     }
-    router.push("/coupons");
   };
+
+  if (isLoading) {
+    return (
+      <AdminShell>
+        <div className="flex items-center justify-center h-[50vh]">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      </AdminShell>
+    );
+  }
 
   return (
     <AdminShell>
@@ -100,7 +148,7 @@ export default function CouponFormClient() {
                   value={formData.code}
                   onChange={handleChange}
                   placeholder="e.g., WELCOME10"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all uppercase"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all uppercase"
                   required
                 />
               </div>
@@ -113,7 +161,7 @@ export default function CouponFormClient() {
                   name="type"
                   value={formData.type}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                   required
                 >
                   <option value="percentage">Percentage (%)</option>
@@ -132,7 +180,7 @@ export default function CouponFormClient() {
                   onChange={handleChange}
                   placeholder={formData.type === "percentage" ? "10" : "200"}
                   min="0"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                   required
                 />
               </div>
@@ -149,7 +197,7 @@ export default function CouponFormClient() {
                     onChange={handleChange}
                     placeholder="0"
                     min="0"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                   />
                 </div>
 
@@ -164,7 +212,7 @@ export default function CouponFormClient() {
                     onChange={handleChange}
                     placeholder="0"
                     min="0"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                   />
                 </div>
               </div>
@@ -181,7 +229,7 @@ export default function CouponFormClient() {
                     onChange={handleChange}
                     placeholder="100"
                     min="1"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                     required
                   />
                 </div>
@@ -195,7 +243,7 @@ export default function CouponFormClient() {
                       name="status"
                       value={formData.status}
                       onChange={handleChange}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                     >
                       <option value="Active">Active</option>
                       <option value="Inactive">Inactive</option>
@@ -215,7 +263,7 @@ export default function CouponFormClient() {
                     name="startDate"
                     value={formData.startDate}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                     required
                   />
                 </div>
@@ -229,7 +277,7 @@ export default function CouponFormClient() {
                     name="endDate"
                     value={formData.endDate}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                     required
                   />
                 </div>
@@ -245,18 +293,28 @@ export default function CouponFormClient() {
                   onChange={handleChange}
                   placeholder="Add a description for this coupon..."
                   rows={3}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all resize-none"
                 />
               </div>
 
               <div className="flex flex-wrap gap-3 pt-4">
-                <Button type="submit">
-                  {isEdit ? "Update Coupon" : "Create Coupon"}
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {isEdit ? "Updating..." : "Creating..."}
+                    </>
+                  ) : (
+                    <>
+                      {isEdit ? "Update Coupon" : "Create Coupon"}
+                    </>
+                  )}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => router.push("/coupons")}
                   type="button"
+                  disabled={isSubmitting}
                 >
                   Cancel
                 </Button>

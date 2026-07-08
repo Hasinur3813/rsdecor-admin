@@ -1,6 +1,8 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   Plus,
   Search,
@@ -12,6 +14,7 @@ import {
   List,
   Image as ImageIcon,
   Layers,
+  Loader2,
 } from "lucide-react";
 import AdminShell from "@/components/layout/AdminShell";
 import {
@@ -25,42 +28,28 @@ import {
 import TablePagination from "@/components/ui/TablePagination";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
+import Toggle from "@/components/ui/Toggle";
 import { useTable } from "@/hooks/useTable";
-import { CATEGORIES, formatDate } from "@/lib/categories";
-
-// Calculate stats
-const getCategoryStats = (categories) => {
-  const totalCategories = categories.length;
-  const activeCategories = categories.filter(
-    (c) => c.status === "Active",
-  ).length;
-  const totalSubcategories = categories.reduce(
-    (sum, c) => sum + (c.items?.length || 0),
-    0,
-  );
-  return { totalCategories, activeCategories, totalSubcategories };
-};
+import {
+  fetchCategories,
+  formatDate,
+  patchCategory,
+  deleteCategory,
+} from "@/lib/categories";
+import toast from "react-hot-toast";
 
 export default function CategoriesClient() {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
-  const [viewMode, setViewMode] = useState("list"); // 'grid' or 'list'
+  const [viewMode, setViewMode] = useState("list");
+  const [categoriesData, setCategoriesData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [updatingIds, setUpdatingIds] = useState(new Set()); // For optimistic UI
 
-  // Filter categories
-  const filteredCategories = CATEGORIES.filter((category) => {
-    const matchesSearch =
-      category.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      category.key.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      category.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus =
-      filterStatus === "All" || category.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
-
-  // Table hook
+  // Table hook using data from API
   const {
-    paginatedData,
     sortBy,
     sortOrder,
     currentPage,
@@ -70,18 +59,130 @@ export default function CategoriesClient() {
     setItemsPerPage,
     handleSort,
   } = useTable({
-    data: filteredCategories,
+    data: categoriesData?.data || [],
     initialSortBy: "title",
     initialSortOrder: "asc",
     initialItemsPerPage: 5,
   });
+
+  // Fetch categories from API
+  const loadCategories = async () => {
+    setLoading(true);
+    try {
+      const params = {
+        search: searchTerm,
+        status: filterStatus,
+        page: currentPage,
+        limit: itemsPerPage,
+        sort: sortBy,
+        order: sortOrder,
+      };
+      const data = await fetchCategories(params);
+      setCategoriesData(data);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to fetch categories");
+      toast.error(err.response?.data?.message || "Failed to fetch categories");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // Debounce API call to prevent excessive re-renders and cascading state updates
+    const timerId = setTimeout(() => {
+      loadCategories();
+    }, 300);
+
+    // Cleanup previous timer to avoid outdated API calls
+    return () => clearTimeout(timerId);
+  }, [searchTerm, filterStatus]);
 
   // Reset page when filter/search changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, filterStatus, setCurrentPage]);
 
-  const stats = getCategoryStats(filteredCategories);
+  // Reload when pagination/sort changes
+  useEffect(() => {
+    // Debounce API call to prevent excessive re-renders and cascading state updates
+    const timerId = setTimeout(() => {
+      loadCategories();
+    }, 300);
+
+    // Cleanup previous timer to avoid outdated API calls
+    return () => clearTimeout(timerId);
+  }, [currentPage, itemsPerPage, sortBy, sortOrder]);
+
+  // Handle delete category
+  const handleDelete = async (categoryId) => {
+    if (!confirm("Are you sure you want to delete this category?")) return;
+    try {
+      await deleteCategory(categoryId);
+      toast.success("Category deleted successfully");
+      loadCategories();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to delete category");
+    }
+  };
+
+  // Handle updating category status with optimistic UI
+  const updateCategoryStatus = async (categoryId, newStatus) => {
+    // Optimistic update
+    setCategoriesData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        data: prev.data.map((cat) => {
+          if (cat.id === categoryId) {
+            return { ...cat, status: newStatus };
+          }
+          return cat;
+        }),
+      };
+    });
+    setUpdatingIds((prev) => new Set(prev).add(categoryId));
+
+    try {
+      await patchCategory(categoryId, { status: newStatus });
+      toast.success(`Category ${newStatus.toLowerCase()} successfully`);
+    } catch (err) {
+      // Revert optimistic update on error
+      setCategoriesData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          data: prev.data.map((cat) => {
+            if (cat.id === categoryId) {
+              return {
+                ...cat,
+                status: newStatus === "Active" ? "Inactive" : "Active",
+              };
+            }
+            return cat;
+          }),
+        };
+      });
+      toast.error(err.response?.data?.message || "Failed to update category");
+    } finally {
+      setUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(categoryId);
+        loadCategories();
+        return next;
+      });
+    }
+  };
+
+  // Calculate stats from API response
+  const stats = {
+    totalCategories: categoriesData?.totalCategories || 0,
+    activeCategories: categoriesData?.activeCategories || 0,
+    totalSubcategories: categoriesData?.totalSubcategories || 0,
+  };
+
+  const paginatedData = categoriesData?.data || [];
+  const apiTotalPages = categoriesData?.pagination?.totalPages || 1;
+  const apiCurrentPage = categoriesData?.pagination?.currentPage || 1;
 
   return (
     <AdminShell>
@@ -209,8 +310,15 @@ export default function CategoriesClient() {
           </div>
         </div>
 
-        {/* Categories View */}
-        {viewMode === "grid" ? (
+        {/* Loading State */}
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : error ? (
+          <div className="text-center py-20 text-red-500">{error}</div>
+        ) : /* Categories View */
+        viewMode === "grid" ? (
           // Grid View
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {paginatedData.length > 0 ? (
@@ -221,19 +329,29 @@ export default function CategoriesClient() {
                 >
                   <div className="relative aspect-video bg-gray-100">
                     {category.image ? (
-                      <img
+                      <Image
                         src={category.image}
                         alt={category.title}
-                        className="w-full h-full object-cover"
+                        fill
+                        className="object-cover"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400">
                         <ImageIcon className="w-10 h-10" />
                       </div>
                     )}
-                    {/* Status Badge */}
+                    {/* Status Toggle */}
                     <div className="absolute top-3 right-3">
-                      <Badge status={category.status} />
+                      <Toggle
+                        checked={category.status === "Active"}
+                        onChange={(newChecked) => {
+                          updateCategoryStatus(
+                            category.id,
+                            newChecked ? "Active" : "Inactive",
+                          );
+                        }}
+                        disabled={updatingIds.has(category.id)}
+                      />
                     </div>
                   </div>
                   <div className="p-5">
@@ -353,12 +471,13 @@ export default function CategoriesClient() {
                       <TableRow key={category.id}>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 shrink-0">
+                            <div className="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 shrink-0 relative">
                               {category.image ? (
-                                <img
+                                <Image
                                   src={category.image}
                                   alt={category.title}
-                                  className="w-full h-full object-cover"
+                                  fill
+                                  className="object-cover"
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-400">
@@ -389,7 +508,16 @@ export default function CategoriesClient() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Badge status={category.status} />
+                          <Toggle
+                            checked={category.status === "Active"}
+                            onChange={(newChecked) => {
+                              updateCategoryStatus(
+                                category.id,
+                                newChecked ? "Active" : "Inactive",
+                              );
+                            }}
+                            disabled={updatingIds.has(category.id)}
+                          />
                         </TableCell>
                         <TableCell>
                           <span className="text-sm text-gray-500">
@@ -420,6 +548,7 @@ export default function CategoriesClient() {
                               variant="ghost"
                               size="sm"
                               className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                              onClick={() => handleDelete(category.id)}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
@@ -431,8 +560,8 @@ export default function CategoriesClient() {
                 </Table>
                 <div className="p-4 border-t border-gray-100">
                   <TablePagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
+                    currentPage={apiCurrentPage}
+                    totalPages={apiTotalPages}
                     itemsPerPage={itemsPerPage}
                     onPageChange={setCurrentPage}
                     onItemsPerPageChange={setItemsPerPage}

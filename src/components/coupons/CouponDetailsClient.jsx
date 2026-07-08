@@ -1,5 +1,6 @@
+/* eslint-disable react/no-unescaped-entities */
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -11,18 +12,74 @@ import {
   Calendar,
   Users,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
+import toast from "react-hot-toast";
+import axiosInstance from "@/lib/axiosInstance";
 import AdminShell from "@/components/layout/AdminShell";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
-import { COUPONS, formatDate, formatBDT, getCouponById } from "@/lib/coupons";
+import ConfirmModal from "@/components/ui/ConfirmModal";
+
+const formatDate = (d) =>
+  new Date(d).toLocaleDateString("en-BD", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+const formatBDT = (n) => "৳" + Number(n).toLocaleString("en-IN");
 
 export default function CouponDetailsClient() {
   const router = useRouter();
   const params = useParams();
 
-  // Find coupon by id
-  const coupon = getCouponById(params.id);
+  const [coupon, setCoupon] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    isDeleting: false,
+  });
+
+  // Fetch coupon by id
+  useEffect(() => {
+    const fetchCoupon = async () => {
+      try {
+        const response = await axiosInstance.get(`/coupons/${params.id}`);
+        if (response.data?.success) {
+          setCoupon(response.data.data);
+        }
+      } catch (error) {
+        toast.error("Failed to load coupon");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchCoupon();
+  }, [params.id]);
+
+  const handleDelete = async () => {
+    setDeleteModal((prev) => ({ ...prev, isDeleting: true }));
+    try {
+      await axiosInstance.delete(`/coupons/${params.id}`);
+      toast.success("Coupon deleted successfully");
+      router.push("/coupons");
+    } catch (error) {
+      toast.error("Failed to delete coupon");
+    } finally {
+      setDeleteModal({ isOpen: false, isDeleting: false });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <AdminShell>
+        <div className="flex items-center justify-center h-[50vh]">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      </AdminShell>
+    );
+  }
 
   if (!coupon) {
     return (
@@ -69,14 +126,14 @@ export default function CouponDetailsClient() {
                 {coupon.code}
               </h1>
               <p className="text-sm text-gray-500 mt-1">
-                Coupon ID: {coupon.id}
+                Coupon ID: {coupon._id}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              onClick={() => router.push(`/coupons/${coupon.id}/edit`)}
+              onClick={() => router.push(`/coupons/${coupon._id}/edit`)}
             >
               <Edit className="w-4 h-4 mr-2" />
               Edit
@@ -84,6 +141,9 @@ export default function CouponDetailsClient() {
             <Button
               variant="ghost"
               className="text-red-500 hover:text-red-600 hover:bg-red-50"
+              onClick={() =>
+                setDeleteModal({ isOpen: true, isDeleting: false })
+              }
             >
               <Trash2 className="w-4 h-4" />
             </Button>
@@ -134,7 +194,8 @@ export default function CouponDetailsClient() {
                   <div>
                     <div className="text-xs text-gray-500">Valid Period</div>
                     <div className="text-sm font-medium text-gray-800">
-                      {formatDate(coupon.startDate)} - {formatDate(coupon.endDate)}
+                      {formatDate(coupon.startDate)} -{" "}
+                      {formatDate(coupon.endDate)}
                     </div>
                   </div>
                 </div>
@@ -171,19 +232,30 @@ export default function CouponDetailsClient() {
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
                   <div className="text-sm text-gray-700">
-                    Minimum order value: <span className="font-semibold">{formatBDT(coupon.minOrder)}</span>
+                    Minimum order value:{" "}
+                    <span className="font-semibold">
+                      {formatBDT(coupon.minOrder)}
+                    </span>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
                   <div className="text-sm text-gray-700">
-                    Maximum discount: <span className="font-semibold">{formatBDT(coupon.maxDiscount)}</span>
+                    Maximum discount:{" "}
+                    <span className="font-semibold">
+                      {coupon.maxDiscount
+                        ? formatBDT(coupon.maxDiscount)
+                        : "None"}
+                    </span>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
                   <div className="text-sm text-gray-700">
-                    Usage limit: <span className="font-semibold">{coupon.usageLimit} times</span>
+                    Usage limit:{" "}
+                    <span className="font-semibold">
+                      {coupon.usageLimit} times
+                    </span>
                   </div>
                 </div>
               </div>
@@ -200,7 +272,7 @@ export default function CouponDetailsClient() {
                 <Button
                   variant="outline"
                   className="w-full justify-start"
-                  onClick={() => router.push(`/coupons/${coupon.id}/edit`)}
+                  onClick={() => router.push(`/coupons/${coupon._id}/edit`)}
                 >
                   <Edit className="w-4 h-4 mr-2" />
                   Edit Coupon
@@ -215,7 +287,7 @@ export default function CouponDetailsClient() {
                   <Badge status={coupon.status} />
                 </div>
                 <div className="text-xs text-gray-500 space-y-1">
-                  <div>Created: {formatDate(coupon.startDate)}</div>
+                  <div>Created: {formatDate(coupon.createdAt)}</div>
                   <div>Expires: {formatDate(coupon.endDate)}</div>
                 </div>
               </div>
@@ -230,7 +302,9 @@ export default function CouponDetailsClient() {
                 <div>
                   <div className="flex justify-between text-xs text-gray-500 mb-1">
                     <span>Used</span>
-                    <span>{coupon.usedCount} / {coupon.usageLimit}</span>
+                    <span>
+                      {coupon.usedCount} / {coupon.usageLimit}
+                    </span>
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-2">
                     <div
@@ -252,6 +326,19 @@ export default function CouponDetailsClient() {
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={deleteModal.isOpen}
+        isLoading={deleteModal.isDeleting}
+        onClose={() =>
+          !deleteModal.isDeleting &&
+          setDeleteModal({ isOpen: false, isDeleting: false })
+        }
+        onConfirm={handleDelete}
+        title="Delete Coupon"
+        message="Are you sure you want to delete this coupon? This action cannot be undone."
+        confirmText="Delete"
+      />
     </AdminShell>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import Image from "next/image";
 import {
   ArrowLeft,
   Plus,
@@ -8,6 +9,7 @@ import {
   Trash2,
   Image as ImageIcon,
   Search,
+  Loader2,
 } from "lucide-react";
 import AdminShell from "@/components/layout/AdminShell";
 import {
@@ -22,14 +24,48 @@ import TablePagination from "@/components/ui/TablePagination";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import { useTable } from "@/hooks/useTable";
-import { CATEGORIES, getCategoryById } from "@/lib/categories";
+import { fetchCategoryById, deleteSubcategory } from "@/lib/categories";
+import toast from "react-hot-toast";
 
 export default function SubcategoriesClient() {
   const router = useRouter();
   const params = useParams();
   const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [category, setCategory] = useState(null);
+  const [error, setError] = useState(null);
 
-  const category = getCategoryById(params.id);
+  // Fetch data
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchCategoryById(params.id);
+      setCategory(data.data);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to load data");
+      toast.error(err.response?.data?.message || "Failed to load data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (params.id) {
+      loadData();
+    }
+  }, [params.id]);
+
+  // Handle delete
+  const handleDelete = async (subcategoryId) => {
+    if (!confirm("Are you sure you want to delete this subcategory?")) return;
+    try {
+      await deleteSubcategory(params.id, subcategoryId);
+      toast.success("Subcategory deleted successfully!");
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to delete subcategory");
+    }
+  };
 
   // Filter subcategories
   const filteredSubcategories = (category?.items || []).filter((sub) =>
@@ -54,13 +90,23 @@ export default function SubcategoriesClient() {
     initialItemsPerPage: 8,
   });
 
-  if (!category) {
+  if (loading) {
+    return (
+      <AdminShell>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AdminShell>
+    );
+  }
+
+  if (error || !category) {
     return (
       <AdminShell>
         <div className="p-6">
           <div className="text-center py-12">
             <h2 className="text-xl font-semibold text-gray-800">
-              Category Not Found
+              {error || "Category Not Found"}
             </h2>
             <p className="text-gray-500 mt-2">
               The category you're looking for doesn't exist.
@@ -160,14 +206,15 @@ export default function SubcategoriesClient() {
                 </TableHeader>
                 <TableBody>
                   {paginatedData.map((subcategory) => (
-                    <TableRow key={subcategory.id}>
+                    <TableRow key={subcategory.id || subcategory.subcategoryId}>
                       <TableCell>
-                        <div className="w-12 h-10 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 shrink-0">
+                        <div className="w-12 h-10 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 shrink-0 relative">
                           {subcategory.image ? (
-                            <img
+                            <Image
                               src={subcategory.image}
                               alt={subcategory.label}
-                              className="w-full h-full object-cover"
+                              fill
+                              className="object-cover"
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-gray-400">
@@ -198,7 +245,7 @@ export default function SubcategoriesClient() {
                             size="sm"
                             onClick={() =>
                               router.push(
-                                `/categories/${category.id}/subcategories/${subcategory.id}/edit`,
+                                `/categories/${category.id}/subcategories/${subcategory.id || subcategory.subcategoryId}/edit`,
                               )
                             }
                           >
@@ -208,6 +255,7 @@ export default function SubcategoriesClient() {
                             variant="ghost"
                             size="sm"
                             className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => handleDelete(subcategory.id || subcategory.subcategoryId)}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>

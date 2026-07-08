@@ -1,111 +1,4 @@
-// Demo category data based on categories_example.js
-export const CATEGORIES = [
-  {
-    id: "CAT-001",
-    key: "wallpapers",
-    title: "Wallpapers",
-    status: "Active",
-    totalDesign: "3433",
-    createdAt: "2024-11-01",
-    items: [
-      {
-        id: "SUB-001",
-        label: "3D Wallpapers",
-        totalDesign: "120",
-        image: "/slider-1.jpg",
-        slug: "3d-wallpapers",
-        filter: { category: "3D Wallpaper" },
-      },
-      {
-        id: "SUB-002",
-        label: "Ceiling Papers",
-        totalDesign: "120",
-        image: "/slider-2.jpg",
-        slug: "ceiling-papers",
-        filter: { category: "3D Ceiling Paper" },
-      },
-      {
-        id: "SUB-003",
-        label: "Kids Room",
-        totalDesign: "120",
-        image: "/slider-3.jpg",
-        slug: "kids-room",
-        filter: { category: "3D Wallpaper", room: "Kids Room" },
-      },
-      {
-        id: "SUB-004",
-        label: "Bedroom",
-        totalDesign: "120",
-        image: "/categories/bedroom.jpg",
-        slug: "bedroom",
-        filter: { category: "3D Wallpaper", room: "Bedroom" },
-      },
-      {
-        id: "SUB-005",
-        label: "Living Room",
-        totalDesign: "120",
-        image: "/categories/wallpaper.jpg",
-        slug: "living-room",
-        filter: { category: "3D Wallpaper", room: "Living Room" },
-      },
-      {
-        id: "SUB-006",
-        label: "Office",
-        totalDesign: "120",
-        image: "/categories/office.jpg",
-        slug: "office",
-        filter: { category: "3D Wallpaper", room: "Office" },
-      },
-    ],
-  },
-  {
-    id: "CAT-002",
-    key: "flooring",
-    title: "Flooring",
-        totalDesign: "3433",
-    status: "Active",
-    createdAt: "2024-11-05",
-    items: [
-      {
-        id: "SUB-007",
-        label: "3D Epoxy Floor",
-        totalDesign: "120",
-        image: "/categories/floor.jpg",
-        slug: "3d-epoxy-floor",
-        filter: { category: "3D Epoxy Floor" },
-      },
-      {
-        id: "SUB-008",
-        label: "Marble Finish",
-        totalDesign: "120",
-        image: "/slider-1.jpg",
-        slug: "marble-finish",
-        filter: { category: "3D Epoxy Floor", finish: "Matte" },
-      },
-      {
-        id: "SUB-009",
-        label: "Metallic Finish",
-        totalDesign: "120",
-        image: "/slider-2.jpg",
-        slug: "metallic-finish",
-        filter: { category: "3D Epoxy Floor", finish: "Metallic" },
-      },
-    ],
-  },
-  {
-    id: "CAT-003",
-    key: "featured",
-    title: "Featured",
-    label: "New Arrivals",
-    totalDesign: "120",
-    description:
-      "Discover our latest premium collection of wallpapers and flooring.",
-    image: "/slider-3.jpg",
-    status: "Active",
-    createdAt: "2024-11-10",
-    items: [],
-  },
-];
+import axiosInstance from "./axiosInstance";
 
 const formatDate = (d) =>
   new Date(d).toLocaleDateString("en-BD", {
@@ -114,14 +7,88 @@ const formatDate = (d) =>
     year: "numeric",
   });
 
-const getCategoryById = (id) => CATEGORIES.find((cat) => cat.id === id);
-const getCategoryByKey = (key) => CATEGORIES.find((cat) => cat.key === key);
-
-// Subcategory helpers
-const getSubcategoryById = (categoryId, subcategoryId) => {
-  const category = getCategoryById(categoryId);
-  if (!category) return null;
-  return category.items?.find((item) => item.id === subcategoryId) || null;
+// Fetch all categories from API
+export const fetchCategories = async (params = {}) => {
+  const { data } = await axiosInstance.get("/categories", { params });
+  return data;
 };
 
-export { formatDate, getCategoryById, getCategoryByKey, getSubcategoryById };
+// Fetch a single category by ID
+export const fetchCategoryById = async (id) => {
+  const { data } = await axiosInstance.get(`/categories/${id}`);
+  return data;
+};
+
+// Fetch subcategories for a category
+export const fetchSubcategories = async (categoryId) => {
+  const { data } = await axiosInstance.get(
+    `/categories/${categoryId}/subcategories`,
+  );
+  return data;
+};
+
+// Create new category
+export const createCategory = async (formData) => {
+  const { data } = await axiosInstance.post("/categories", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+// Update category
+export const updateCategory = async (id, formData) => {
+  const { data } = await axiosInstance.put(`/categories/${id}`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+};
+
+// Delete a category
+export const deleteCategory = async (id) => {
+  const { data } = await axiosInstance.delete(`/categories/${id}`);
+  return data;
+};
+
+// Patch a category (single field update)
+export const patchCategory = async (id, updates) => {
+  const { data } = await axiosInstance.patch(`/categories/${id}`, updates);
+  return data;
+};
+
+// --- SUBCATEGORY API HELPERS ---
+
+// Create new subcategory
+export const createSubcategory = async (categoryId, formData) => {
+  const { data } = await axiosInstance.post(
+    `/categories/${categoryId}/subcategories`,
+    formData,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    },
+  );
+  return data;
+};
+
+// Update subcategory
+export const updateSubcategory = async (
+  categoryId,
+  subcategoryId,
+  formData,
+) => {
+  const { data } = await axiosInstance.put(
+    `/categories/${categoryId}/subcategories/${subcategoryId}`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  );
+  return data;
+};
+
+// Delete subcategory
+export const deleteSubcategory = async (categoryId, subcategoryId) => {
+  const { data } = await axiosInstance.delete(
+    `/categories/${categoryId}/subcategories/${subcategoryId}`,
+  );
+  return data;
+};
+
+export { formatDate };
