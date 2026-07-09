@@ -1,4 +1,3 @@
-// Demo order details data for invoice generation
 export const ORDER_DETAILS = [
   {
     id: "ORD-2024-124",
@@ -220,13 +219,13 @@ export const generateInvoice = (order) => {
 
 Invoice ID: ${order.id}
 Date: ${formatDate(order.date)}
-Delivery Date: ${formatDate(order.deliveryDate)}
+Delivery Date: ${order.deliveryDate ? formatDate(order.deliveryDate) : "—"}
 
 --------------------------------------------------------------------------------
 Customer Details
 --------------------------------------------------------------------------------
 Name: ${order.customer}
-Email: ${order.email}
+Email: ${order.email || "—"}
 Phone: ${order.phone}
 Address: ${order.address}
 
@@ -274,9 +273,11 @@ export const downloadInvoice = (order) => {
   URL.revokeObjectURL(url);
 };
 
-// Download invoice by order ID
+// Download invoice by order ID (still works if you have the order object, or modify it to fetch
 export const downloadInvoiceById = (orderId) => {
-  const order = ORDER_DETAILS.find((o) => o.id === orderId);
-  if (!order) return;
-  downloadInvoice(order);
+  // If you need to fetch from API, you can import axiosInstance here
+  // For now, we'll keep it as placeholder since we pass the order directly from the components
+  console.warn(
+    "downloadInvoiceById is deprecated, pass the order object directly to downloadInvoice",
+  );
 };

@@ -1,5 +1,6 @@
+/* eslint-disable react/no-unescaped-entities */
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -8,17 +9,22 @@ import {
   Phone,
   MapPin,
   Calendar,
-  User,
-  ShoppingCart,
-  DollarSign,
   Package,
   Download,
+  Loader2,
+  Coins,
+  Tag,
+  Weight,
+  ArrowUpDown,
+  Ruler,
 } from "lucide-react";
+import toast from "react-hot-toast";
+import axiosInstance from "@/lib/axiosInstance";
 import AdminShell from "@/components/layout/AdminShell";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import Image from "next/image";
-import { ORDER_DETAILS, downloadInvoice } from "@/lib/invoice";
+import { downloadInvoice } from "@/lib/invoice";
 
 const formatBDT = (n) => "৳" + Number(n).toLocaleString("en-IN");
 const formatDate = (d) =>
@@ -28,16 +34,114 @@ const formatDate = (d) =>
     year: "numeric",
   });
 
-// Demo order data
-const ORDERS = ORDER_DETAILS;
-
 export default function OrderDetailsClient() {
   const router = useRouter();
   const params = useParams();
+  const [order, setOrder] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [status, setStatus] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isUpdatingPayment, setIsUpdatingPayment] = useState(false);
+  const [isUpdatingDelivery, setIsUpdatingDelivery] = useState(false);
 
-  // Find order by id
-  const order = ORDERS.find((o) => o.id === params.id);
+  const fetchOrder = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await axiosInstance.get(`/orders/${params.id}`);
+      if (response.data?.success) {
+        setOrder(response.data.data);
+        setStatus(response.data.data.status);
+        setPaymentStatus(response.data.data.paymentStatus);
+        // Format delivery date for input if it exists
+        if (response.data.data.deliveryDate) {
+          setDeliveryDate(
+            new Date(response.data.data.deliveryDate)
+              .toISOString()
+              .split("T")[0],
+          );
+        }
+      }
+    } catch (error) {
+      toast.error("Failed to load order");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [params.id]);
+
+  const handleDeliveryDateChange = async (newDate) => {
+    setDeliveryDate(newDate);
+    setIsUpdatingDelivery(true);
+    try {
+      const response = await axiosInstance.patch(`/orders/${params.id}`, {
+        field: "deliveryDate",
+        value: newDate || null,
+      });
+      if (response.data?.success) {
+        setOrder(response.data.data);
+        toast.success("Delivery date updated");
+      }
+    } catch (error) {
+      toast.error("Failed to update delivery date");
+    } finally {
+      setIsUpdatingDelivery(false);
+    }
+  };
+
+  const handleStatusChange = async (newStatus) => {
+    if (newStatus === status) return;
+    setIsUpdating(true);
+    try {
+      const response = await axiosInstance.patch(`/orders/${params.id}`, {
+        field: "status",
+        value: newStatus,
+      });
+      if (response.data?.success) {
+        setOrder(response.data.data);
+        setStatus(newStatus);
+        toast.success("Order status updated");
+      }
+    } catch (error) {
+      toast.error("Failed to update order");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handlePaymentStatusChange = async (newPaymentStatus) => {
+    if (newPaymentStatus === paymentStatus) return;
+    setIsUpdatingPayment(true);
+    try {
+      const response = await axiosInstance.patch(`/orders/${params.id}`, {
+        field: "paymentStatus",
+        value: newPaymentStatus,
+      });
+      if (response.data?.success) {
+        setOrder(response.data.data);
+        setPaymentStatus(newPaymentStatus);
+        toast.success("Payment status updated");
+      }
+    } catch (error) {
+      toast.error("Failed to update payment status");
+    } finally {
+      setIsUpdatingPayment(false);
+    }
+  };
+
+  useEffect(() => {
+    setTimeout(() => fetchOrder(), 0);
+  }, [fetchOrder]);
+
+  if (isLoading) {
+    return (
+      <AdminShell>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      </AdminShell>
+    );
+  }
 
   if (!order) {
     return (
@@ -48,7 +152,7 @@ export default function OrderDetailsClient() {
               Order Not Found
             </h2>
             <p className="text-gray-500 mt-2">
-              The order you&apos;re looking for doesn&apos;t exist.
+              The order you're looking for doesn't exist.
             </p>
             <Button className="mt-4" onClick={() => router.push("/orders")}>
               Back to Orders
@@ -124,9 +228,10 @@ export default function OrderDetailsClient() {
                 </div>
                 <div className="flex items-center gap-2">
                   <select
-                    value={status || order.status}
-                    onChange={(e) => setStatus(e.target.value)}
-                    className="px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    value={status}
+                    onChange={(e) => handleStatusChange(e.target.value)}
+                    disabled={isUpdating}
+                    className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
                   >
                     <option value="Pending">Pending</option>
                     <option value="Confirmed">Confirmed</option>
@@ -152,9 +257,24 @@ export default function OrderDetailsClient() {
                     <Calendar className="w-4 h-4" />
                     <span>Delivery Date</span>
                   </div>
-                  <p className="text-sm font-medium text-gray-800">
-                    {formatDate(order.deliveryDate)}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={deliveryDate}
+                      onChange={(e) => handleDeliveryDateChange(e.target.value)}
+                      disabled={isUpdatingDelivery}
+                      className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
+                    />
+                    {deliveryDate && (
+                      <button
+                        onClick={() => handleDeliveryDateChange("")}
+                        disabled={isUpdatingDelivery}
+                        className="px-3 py-2 rounded-lg border border-gray-200 text-xs text-gray-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all disabled:opacity-50"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -169,33 +289,142 @@ export default function OrderDetailsClient() {
             </div>
 
             {/* Order Items */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
               <h3 className="text-sm font-semibold text-gray-800 mb-4">
                 Order Items
               </h3>
-              <div className="divide-y divide-gray-100">
+              <div className="space-y-4">
                 {order.items.map((item, idx) => (
                   <div
-                    key={item.id}
-                    className="flex items-center gap-4 py-4 first:pt-0 last:pb-0"
+                    key={item._id || idx}
+                    className="flex flex-col sm:flex-row gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100"
                   >
-                    <Image
-                      src={item.image}
-                      alt={item.name}
-                      width={80}
-                      height={80}
-                      className="w-20 h-20 rounded-xl object-cover border border-gray-100"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-medium text-gray-800 truncate">
+                    {/* Item Image */}
+                    {item.image ? (
+                      <Image
+                        src={item.image}
+                        alt={item.name}
+                        width={100}
+                        height={100}
+                        className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl object-cover border border-gray-200 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-gray-200 flex items-center justify-center shrink-0 border border-gray-200">
+                        <Package className="w-10 h-10 text-gray-500" />
+                      </div>
+                    )}
+
+                    {/* Item Details */}
+                    {/* Item Details */}
+                    <div className="flex-1 min-w-0 space-y-3">
+                      <h4
+                        className="text-base font-semibold text-gray-900 truncate"
+                        title={item.name}
+                      >
                         {item.name}
                       </h4>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {formatBDT(item.price)} x {item.quantity}
-                      </p>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                        {item.sqft > 0 && (
+                          <div className="bg-white px-3 py-2.5 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Ruler
+                                className="w-3 h-3 text-gray-400"
+                                strokeWidth={2}
+                              />
+                              <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">
+                                Square Feet
+                              </p>
+                            </div>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {item.sqft}
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="bg-white px-3 py-2.5 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <ArrowUpDown
+                              className="w-3 h-3 text-gray-400"
+                              strokeWidth={2}
+                            />
+                            <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">
+                              Height
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {item.height}
+                          </p>
+                        </div>
+
+                        <div className="bg-white px-3 py-2.5 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Weight
+                              className="w-3 h-3 text-gray-400"
+                              strokeWidth={2}
+                            />
+                            <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">
+                              Weight
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {item.weight}
+                          </p>
+                        </div>
+
+                        <div className="bg-white px-3 py-2.5 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Tag
+                              className="w-3 h-3 text-gray-400"
+                              strokeWidth={2}
+                            />
+                            <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">
+                              Price/Sqft
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {formatBDT(item.pricePerSqft)}
+                          </p>
+                        </div>
+
+                        <div className="bg-white px-3 py-2.5 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Package
+                              className="w-3 h-3 text-gray-400"
+                              strokeWidth={2}
+                            />
+                            <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">
+                              Quantity
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {item.quantity}
+                          </p>
+                        </div>
+
+                        <div className="bg-gray-900 px-3 py-2.5 rounded-lg border border-gray-900">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Coins
+                              className="w-3 h-3 text-gray-400"
+                              strokeWidth={2}
+                            />
+                            <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">
+                              Unit Price
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold text-white">
+                            {formatBDT(item.price)}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-gray-800">
+
+                    {/* Total Price */}
+                    <div className="flex items-center justify-end sm:justify-center sm:flex-col gap-2 border-t sm:border-t-0 sm:border-l border-gray-200 pt-3 sm:pt-0 sm:pl-4">
+                      <p className="text-[10px] uppercase text-gray-400 font-medium">
+                        Total
+                      </p>
+                      <p className="text-lg font-bold text-primary">
                         {formatBDT(item.price * item.quantity)}
                       </p>
                     </div>
@@ -242,7 +471,14 @@ export default function OrderDetailsClient() {
                     <p className="text-sm font-medium text-gray-800">
                       {order.customer}
                     </p>
-                    <p className="text-xs text-gray-500">{order.email}</p>
+                    {order.customerId && (
+                      <p className="text-xs text-gray-500">
+                        ID: {order.customerId}
+                      </p>
+                    )}
+                    {order.email && (
+                      <p className="text-xs text-gray-500">{order.email}</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-gray-600 text-sm">
@@ -250,6 +486,10 @@ export default function OrderDetailsClient() {
                   <a href={`tel:${order.phone}`} className="hover:text-primary">
                     {order.phone}
                   </a>
+                </div>
+                <div className="flex items-center gap-2 text-gray-600 text-sm">
+                  <MapPin className="w-4 h-4 text-gray-400" />
+                  <span>Area: {order.area}</span>
                 </div>
                 <div className="flex items-start gap-2 text-gray-600 text-sm">
                   <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
@@ -272,13 +512,25 @@ export default function OrderDetailsClient() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">Status</span>
-                  <Badge
-                    status={
-                      order.paymentStatus === "Paid" ? "Active" : "Inactive"
-                    }
-                  >
-                    {order.paymentStatus}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      status={paymentStatus === "Paid" ? "Active" : "Inactive"}
+                    >
+                      {paymentStatus}
+                    </Badge>
+                    <select
+                      value={paymentStatus}
+                      onChange={(e) =>
+                        handlePaymentStatusChange(e.target.value)
+                      }
+                      disabled={isUpdatingPayment}
+                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all disabled:opacity-50"
+                    >
+                      <option value="Paid">Paid</option>
+                      <option value="Unpaid">Unpaid</option>
+                      <option value="Partial">Partial</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>

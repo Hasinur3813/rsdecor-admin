@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -12,7 +12,10 @@ import {
   Clock,
   Check,
   Download,
+  Loader2,
 } from "lucide-react";
+import toast from "react-hot-toast";
+import axiosInstance from "@/lib/axiosInstance";
 import AdminShell from "@/components/layout/AdminShell";
 import {
   Table,
@@ -25,20 +28,7 @@ import {
 import TablePagination from "@/components/ui/TablePagination";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
-import { useTable } from "@/hooks/useTable";
-import { ORDER_DETAILS, downloadInvoiceById } from "@/lib/invoice";
-
-// Demo order data - extract from ORDER_DETAILS
-const ORDERS = ORDER_DETAILS.map((order) => ({
-  id: order.id,
-  customer: order.customer,
-  phone: order.phone,
-  area: order.area,
-  items: order.items[0].name,
-  total: order.total,
-  status: order.status,
-  date: order.date,
-}));
+import { downloadInvoice } from "@/lib/invoice";
 
 const formatBDT = (n) => "৳" + Number(n).toLocaleString("en-IN");
 const formatDate = (d) =>
@@ -48,54 +38,90 @@ const formatDate = (d) =>
     year: "numeric",
   });
 
-// Calculate stats
-const getOrderStats = (orders) => {
-  const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0);
-  const totalOrders = orders.length;
-  const pendingOrders = orders.filter((o) => o.status === "Pending").length;
-  const completedOrders = orders.filter((o) => o.status === "Completed").length;
-  return { totalRevenue, totalOrders, pendingOrders, completedOrders };
-};
-
 export default function OrdersClient() {
   const router = useRouter();
+
+  const [orders, setOrders] = useState([]);
+  const [stats, setStats] = useState({
+    totalRevenue: 0,
+    totalOrders: 0,
+    pendingOrders: 0,
+    completedOrders: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  // API filters & pagination state
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
+  const [sortBy, setSortBy] = useState("date");
+  const [sortOrder, setSortOrder] = useState("desc");
 
-  // Filter orders
-  const filteredOrders = ORDERS.filter((order) => {
-    const matchesSearch =
-      order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus =
-      filterStatus === "All" || order.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
-  // Table hook
-  const {
-    paginatedData,
-    sortBy,
-    sortOrder,
-    currentPage,
-    itemsPerPage,
-    totalPages,
-    setCurrentPage,
-    setItemsPerPage,
-    handleSort,
-  } = useTable({
-    data: filteredOrders,
-    initialSortBy: "date",
-    initialSortOrder: "desc",
-    initialItemsPerPage: 5,
-  });
+  const fetchOrders = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await axiosInstance.get("/orders", {
+        params: {
+          page: currentPage,
+          limit: itemsPerPage,
+          search: searchTerm,
+          status: filterStatus,
+          sort: sortBy,
+          order: sortOrder,
+        },
+      });
+      if (response.data?.success) {
+        setOrders(response.data.data);
+        setTotalItems(response.data.pagination.totalItems);
+        setTotalPages(response.data.pagination.totalPages);
+      }
+    } catch (error) {
+      toast.error("Failed to load orders");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentPage, itemsPerPage, searchTerm, filterStatus, sortBy, sortOrder]);
+
+  const fetchStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const response = await axiosInstance.get("/orders/stats");
+      if (response.data?.success) {
+        setStats(response.data.data);
+      }
+    } catch (error) {
+      toast.error("Failed to load order stats");
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setTimeout(() => {
+      fetchOrders();
+      fetchStats();
+    }, 0);
+  }, [fetchOrders, fetchStats]);
 
   // Reset page when filter/search changes
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, filterStatus, setCurrentPage]);
+    setTimeout(() => setCurrentPage(1), 0);
+  }, [searchTerm, filterStatus]);
 
-  const stats = getOrderStats(filteredOrders);
+  const handleSort = (key) => {
+    if (sortBy === key) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(key);
+      setSortOrder("asc");
+    }
+    setCurrentPage(1);
+  };
 
   return (
     <AdminShell>
@@ -123,7 +149,7 @@ export default function OrdersClient() {
               </div>
               <div>
                 <div className="text-2xl font-bold text-gray-900 font-heading">
-                  {stats.totalOrders}
+                  {statsLoading ? "-" : stats.totalOrders}
                 </div>
                 <div className="text-xs font-medium text-gray-500">
                   Total Orders
@@ -139,7 +165,7 @@ export default function OrdersClient() {
               </div>
               <div>
                 <div className="text-2xl font-bold text-gray-900 font-heading">
-                  {stats.pendingOrders}
+                  {statsLoading ? "-" : stats.pendingOrders}
                 </div>
                 <div className="text-xs font-medium text-gray-500">Pending</div>
               </div>
@@ -153,7 +179,7 @@ export default function OrdersClient() {
               </div>
               <div>
                 <div className="text-2xl font-bold text-gray-900 font-heading">
-                  {stats.completedOrders}
+                  {statsLoading ? "-" : stats.completedOrders}
                 </div>
                 <div className="text-xs font-medium text-gray-500">
                   Completed
@@ -169,7 +195,7 @@ export default function OrdersClient() {
               </div>
               <div>
                 <div className="text-2xl font-bold text-gray-900 font-heading">
-                  {formatBDT(stats.totalRevenue)}
+                  {statsLoading ? "-" : formatBDT(stats.totalRevenue)}
                 </div>
                 <div className="text-xs font-medium text-gray-500">
                   Total Revenue
@@ -276,11 +302,20 @@ export default function OrdersClient() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginatedData.length > 0 ? (
-                paginatedData.map((order) => (
-                  <TableRow key={order.id}>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-12">
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                      <p className="text-gray-500 text-sm">Loading orders...</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : orders.length > 0 ? (
+                orders.map((order) => (
+                  <TableRow key={order._id}>
                     <TableCell>
-                      <span className="text-sm font-semibold text-gray-700 font-mono">
+                      <span className="text-sm font-bold text-gray-900 font-mono">
                         {order.id}
                       </span>
                     </TableCell>
@@ -289,14 +324,17 @@ export default function OrdersClient() {
                         <div className="text-sm font-medium text-gray-800">
                           {order.customer}
                         </div>
-                        <div className="text-xs text-gray-400">
+                        <div className="text-xs text-gray-500">
                           {order.area}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <span className="text-sm text-gray-600 max-w-[160px] block truncate">
-                        {order.items}
+                        {order.items?.[0]?.name || "—"}
+                        {order.items?.length > 1
+                          ? ` + ${order.items.length - 1} more`
+                          : ""}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -319,7 +357,7 @@ export default function OrdersClient() {
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            downloadInvoiceById(order.id);
+                            downloadInvoice(order);
                           }}
                         >
                           <Download className="w-3.5 h-3.5" />
@@ -348,7 +386,7 @@ export default function OrdersClient() {
             currentPage={currentPage}
             totalPages={totalPages}
             itemsPerPage={itemsPerPage}
-            totalItems={filteredOrders.length}
+            totalItems={totalItems}
             onPageChange={setCurrentPage}
             onItemsPerPageChange={(val) => {
               setItemsPerPage(val);
