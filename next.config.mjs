@@ -1,12 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // turbo: false,
-    images: {
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: "https://serverrsdecor.vercel.app/api/:path*",
+      },
+    ];
+  },
+  images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: 'res.cloudinary.com',
-        pathname: '/**',
+        protocol: "https",
+        hostname: "res.cloudinary.com",
+        pathname: "/**",
       },
     ],
   },
