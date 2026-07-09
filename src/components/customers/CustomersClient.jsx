@@ -9,7 +9,12 @@ import {
   Users,
   DollarSign,
   UserPlus,
+  Shield,
+  Trash2,
+  Loader2,
+  Power,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import AdminShell from "@/components/layout/AdminShell";
 import {
   Table,
@@ -23,7 +28,12 @@ import TablePagination from "@/components/ui/TablePagination";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import { useTable } from "@/hooks/useTable";
-import { CUSTOMERS, formatBDT, formatDate } from "@/lib/customers";
+import {
+  fetchCustomers,
+  formatBDT,
+  patchCustomer,
+  deleteCustomer,
+} from "@/lib/customers";
 
 // Calculate stats
 const getCustomerStats = (customers) => {
@@ -36,16 +46,25 @@ const getCustomerStats = (customers) => {
 
 export default function CustomersClient() {
   const router = useRouter();
+  const [customers, setCustomers] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [pagination, setPagination] = useState({
+    totalItems: 0,
+    totalPages: 1,
+  });
+  const [updating, setUpdating] = useState(null);
 
-  // Filter customers
-  const filteredCustomers = CUSTOMERS.filter((customer) => {
+  // Filter customers (client-side filtering on fetched data)
+  const filteredCustomers = customers.filter((customer) => {
     const matchesSearch =
       customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.phone.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (customer.phone &&
+        customer.phone.toLowerCase().includes(searchTerm.toLowerCase())) ||
       customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.id.toLowerCase().includes(searchTerm.toLowerCase());
+      (customer.customerId &&
+        customer.customerId.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus =
       filterStatus === "All" || customer.status === filterStatus;
     return matchesSearch && matchesStatus;
@@ -64,17 +83,105 @@ export default function CustomersClient() {
     handleSort,
   } = useTable({
     data: filteredCustomers,
-    initialSortBy: "joinedDate",
+    initialSortBy: "createdAt",
     initialSortOrder: "desc",
-    initialItemsPerPage: 5,
+    initialItemsPerPage: 10,
   });
+
+  // Fetch customers
+  const loadCustomers = async () => {
+    setIsLoading(true);
+    try {
+      const data = await fetchCustomers();
+      if (data.success) {
+        setCustomers(data.data);
+        setPagination(data.pagination || {});
+      }
+    } catch (error) {
+      console.error("Failed to load customers", error);
+      toast.error("Failed to load customers");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Toggle customer active status
+  const handleToggleStatus = async (customer) => {
+    setUpdating(customer._id);
+    try {
+      const data = await patchCustomer(customer._id, {
+        field: "isActive",
+        value: !customer.isActive,
+      });
+      if (data.success) {
+        setCustomers((prev) =>
+          prev.map((c) =>
+            c._id === customer._id ? { ...c, ...data.data } : c,
+          ),
+        );
+        toast.success("Customer status updated");
+      }
+    } catch (error) {
+      console.error("Failed to update status", error);
+      toast.error("Failed to update status");
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  // Promote to admin
+  const handlePromoteToAdmin = async (customer) => {
+    setUpdating(customer._id);
+    try {
+      const data = await patchCustomer(customer._id, {
+        field: "role",
+        value: "admin",
+      });
+      if (data.success) {
+        setCustomers((prev) =>
+          prev.map((c) =>
+            c._id === customer._id ? { ...c, ...data.data } : c,
+          ),
+        );
+        toast.success("Customer promoted to admin");
+      }
+    } catch (error) {
+      console.error("Failed to promote", error);
+      toast.error("Failed to promote");
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  // Delete customer
+  const handleDeleteCustomer = async (customer) => {
+    if (!confirm("Are you sure you want to delete this customer?")) return;
+    setUpdating(customer._id);
+    try {
+      const data = await deleteCustomer(customer._id);
+      if (data.success) {
+        setCustomers((prev) => prev.filter((c) => c._id !== customer._id));
+        toast.success("Customer deleted");
+      }
+    } catch (error) {
+      console.error("Failed to delete", error);
+      toast.error("Failed to delete");
+    } finally {
+      setUpdating(null);
+    }
+  };
 
   // Reset page when filter/search changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, filterStatus, setCurrentPage]);
 
-  const stats = getCustomerStats(filteredCustomers);
+  // Initial load
+  useEffect(() => {
+    setTimeout(() => loadCustomers(), 0);
+  }, []);
+
+  const stats = getCustomerStats(customers);
 
   return (
     <AdminShell>
@@ -195,159 +302,224 @@ export default function CustomersClient() {
 
         {/* Customers Table */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead
-                  sortable
-                  sortKey="id"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
-                  onSort={handleSort}
-                >
-                  Customer ID
-                </TableHead>
-                <TableHead
-                  sortable
-                  sortKey="name"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
-                  onSort={handleSort}
-                >
-                  Name
-                </TableHead>
-                <TableHead
-                  sortable
-                  sortKey="phone"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
-                  onSort={handleSort}
-                >
-                  Phone
-                </TableHead>
-                <TableHead
-                  sortable
-                  sortKey="area"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
-                  onSort={handleSort}
-                >
-                  Area
-                </TableHead>
-                <TableHead
-                  sortable
-                  sortKey="totalOrders"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
-                  onSort={handleSort}
-                >
-                  Total Orders
-                </TableHead>
-                <TableHead
-                  sortable
-                  sortKey="totalSpent"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
-                  onSort={handleSort}
-                >
-                  Total Spent
-                </TableHead>
-                <TableHead
-                  sortable
-                  sortKey="status"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
-                  onSort={handleSort}
-                >
-                  Status
-                </TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedData.length > 0 ? (
-                paginatedData.map((customer) => (
-                  <TableRow key={customer.id}>
-                    <TableCell>
-                      <span className="text-sm font-semibold text-gray-700 font-mono">
-                        {customer.id}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold text-sm">
-                          {customer.name.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-800">
-                            {customer.name}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {customer.email}
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-gray-600">
-                        {customer.phone}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-gray-600">
-                        {customer.area}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm font-medium text-gray-800">
-                        {customer.totalOrders}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm font-semibold text-gray-800">
-                        {formatBDT(customer.totalSpent)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge status={customer.status} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            router.push(`/customers/${customer.id}`)
-                          }
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead
+                      sortable
+                      sortKey="customerId"
+                      sortBy={sortBy}
+                      sortOrder={sortOrder}
+                      onSort={handleSort}
+                    >
+                      Customer ID
+                    </TableHead>
+                    <TableHead
+                      sortable
+                      sortKey="name"
+                      sortBy={sortBy}
+                      sortOrder={sortOrder}
+                      onSort={handleSort}
+                    >
+                      Name
+                    </TableHead>
+                    <TableHead
+                      sortable
+                      sortKey="phone"
+                      sortBy={sortBy}
+                      sortOrder={sortOrder}
+                      onSort={handleSort}
+                    >
+                      Phone
+                    </TableHead>
+                    <TableHead
+                      sortable
+                      sortKey="area"
+                      sortBy={sortBy}
+                      sortOrder={sortOrder}
+                      onSort={handleSort}
+                    >
+                      Area
+                    </TableHead>
+                    <TableHead
+                      sortable
+                      sortKey="totalOrders"
+                      sortBy={sortBy}
+                      sortOrder={sortOrder}
+                      onSort={handleSort}
+                    >
+                      Total Orders
+                    </TableHead>
+                    <TableHead
+                      sortable
+                      sortKey="totalSpent"
+                      sortBy={sortBy}
+                      sortOrder={sortOrder}
+                      onSort={handleSort}
+                    >
+                      Total Spent
+                    </TableHead>
+                    <TableHead
+                      sortable
+                      sortKey="status"
+                      sortBy={sortBy}
+                      sortOrder={sortOrder}
+                      onSort={handleSort}
+                    >
+                      Status
+                    </TableHead>
+                    <TableHead
+                      sortable
+                      sortKey="role"
+                      sortBy={sortBy}
+                      sortOrder={sortOrder}
+                      onSort={handleSort}
+                    >
+                      Role
+                    </TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12">
-                    <div className="text-gray-400 text-sm">
-                      No customers found
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          <TablePagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            itemsPerPage={itemsPerPage}
-            totalItems={filteredCustomers.length}
-            onPageChange={setCurrentPage}
-            onItemsPerPageChange={(val) => {
-              setItemsPerPage(val);
-              setCurrentPage(1);
-            }}
-          />
+                </TableHeader>
+                <TableBody>
+                  {paginatedData.length > 0 ? (
+                    paginatedData.map((customer) => (
+                      <TableRow key={customer._id}>
+                        <TableCell>
+                          <span className="text-sm font-semibold text-gray-700 font-mono">
+                            {customer.customerId}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold text-sm">
+                              {customer.name.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-800">
+                                {customer.name}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {customer.email}
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-gray-600">
+                            {customer.phone}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-gray-600">
+                            {customer.area}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm font-medium text-gray-800">
+                            {customer.totalOrders}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm font-semibold text-gray-800">
+                            {formatBDT(customer.totalSpent)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge status={customer.status} />
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            status={
+                              customer.role === "admin" ? "Active" : "Inactive"
+                            }
+                          >
+                            {customer.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                router.push(`/customers/${customer._id}`)
+                              }
+                              disabled={updating === customer._id}
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleToggleStatus(customer)}
+                              disabled={updating === customer._id}
+                            >
+                              {updating === customer._id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Power className="w-3.5 h-3.5" />
+                              )}
+                            </Button>
+                            {customer.role !== "admin" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handlePromoteToAdmin(customer)}
+                                disabled={updating === customer._id}
+                              >
+                                {updating === customer._id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Shield className="w-3.5 h-3.5" />
+                                )}
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteCustomer(customer)}
+                              disabled={updating === customer._id}
+                            >
+                              {updating === customer._id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                              )}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-12">
+                        <div className="text-gray-400 text-sm">
+                          No customers found
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+              <TablePagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                itemsPerPage={itemsPerPage}
+                totalItems={filteredCustomers.length}
+                onPageChange={setCurrentPage}
+                onItemsPerPageChange={(val) => {
+                  setItemsPerPage(val);
+                  setCurrentPage(1);
+                }}
+              />
+            </>
+          )}
         </div>
       </div>
     </AdminShell>
