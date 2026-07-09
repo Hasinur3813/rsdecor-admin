@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
 export function proxy(request) {
-  const token = request.cookies.get("rs_access_token")?.value;
+  const token =
+    request.cookies.get("rs_access_token")?.value ||
+    request.cookies.get("rs_refresh_token")?.value;
   const path = request.nextUrl.pathname;
 
   // Paths that do not require authentication
