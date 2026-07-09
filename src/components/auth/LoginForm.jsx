@@ -103,21 +103,21 @@ function LoginContent() {
     if (cooldown > 0) return;
     dismissError();
 
-    const result = await dispatch(loginAdmin(data)).unwrap();
+    try {
+      const user = await dispatch(loginAdmin(data)).unwrap();
 
-    if (loginAdmin.fulfilled.match(result)) {
       // Clear persistence on success
       localStorage.removeItem("rs_login_attempts");
       localStorage.removeItem("rs_login_cooldown_until");
 
-      const userName = result.payload?.name?.split(" ")[0] || "Admin";
+      const userName = user?.name?.split(" ")[0] || "Admin";
       toast.success(`Welcome back, ${userName}! 👋`);
-      // Use window.location for full page reload to ensure cookies are properly set and middleware runs
+      // Use window.location for full page reload to ensure cookies are properly set and proxy runs
       setTimeout(() => {
         window.location.href = "/dashboard";
       }, 100);
-    } else {
-      const errorMsg = result.payload;
+    } catch (error) {
+      const errorMsg = error;
       const msg = typeof errorMsg === "string" ? errorMsg.toLowerCase() : "";
 
       if (msg.includes("email")) {

@@ -6,6 +6,8 @@ export function proxy(request) {
     request.cookies.get("rs_refresh_token")?.value;
   const path = request.nextUrl.pathname;
 
+  // console.log(token);
+
   // Paths that do not require authentication
   const isPublicPath = path === "/login";
 
