@@ -111,6 +111,7 @@ const authSlice = createSlice({
         state.admin = action.payload;
         state.error = null;
         state.sessionExpired = false;
+        state.hasCheckedInitialAuth = true;
       })
       .addCase(loginAdmin.rejected, (state, action) => {
         state.loading = false;

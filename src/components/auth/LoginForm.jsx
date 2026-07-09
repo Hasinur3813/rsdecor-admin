@@ -37,7 +37,12 @@ function LoginContent() {
   });
 
   useEffect(() => {
-    if (isAuthenticated) router.replace("/dashboard");
+    if (isAuthenticated) {
+      // Small delay to ensure cookie is set and Redux state is fully updated
+      setTimeout(() => {
+        router.replace("/dashboard");
+      }, 100);
+    }
   }, [isAuthenticated, router]);
 
   useEffect(() => {
@@ -56,12 +61,18 @@ function LoginContent() {
 
   // Initialize from storage on mount
   useEffect(() => {
-    const savedAttempts = Number(localStorage.getItem("rs_login_attempts")) || 0;
-    setAttempts(savedAttempts);
+    const savedAttempts =
+      Number(localStorage.getItem("rs_login_attempts")) || 0;
+    setTimeout(() => setAttempts(savedAttempts), 0);
 
-    const cooldownUntil = Number(localStorage.getItem("rs_login_cooldown_until"));
+    const cooldownUntil = Number(
+      localStorage.getItem("rs_login_cooldown_until"),
+    );
     if (cooldownUntil && cooldownUntil > Date.now()) {
-      setCooldown(Math.ceil((cooldownUntil - Date.now()) / 1000));
+      setTimeout(
+        () => setCooldown(Math.ceil((cooldownUntil - Date.now()) / 1000)),
+        0,
+      );
     } else {
       localStorage.removeItem("rs_login_cooldown_until");
     }
@@ -72,14 +83,16 @@ function LoginContent() {
     if (cooldown <= 0) return;
     const t = setInterval(() => {
       setCooldown((currentCooldown) => {
-        const cooldownUntil = Number(localStorage.getItem("rs_login_cooldown_until"));
-        
+        const cooldownUntil = Number(
+          localStorage.getItem("rs_login_cooldown_until"),
+        );
+
         if (!cooldownUntil || Date.now() >= cooldownUntil) {
           clearInterval(t);
           localStorage.removeItem("rs_login_cooldown_until");
           return 0;
         }
-        
+
         return Math.ceil((cooldownUntil - Date.now()) / 1000);
       });
     }, 1000);
@@ -96,7 +109,7 @@ function LoginContent() {
       // Clear persistence on success
       localStorage.removeItem("rs_login_attempts");
       localStorage.removeItem("rs_login_cooldown_until");
-      
+
       const userName = result.payload?.name?.split(" ")[0] || "Admin";
       toast.success(`Welcome back, ${userName}! 👋`);
       router.replace("/dashboard");
@@ -120,11 +133,14 @@ function LoginContent() {
       if (newAttempts >= 5) {
         const multiplier = Math.pow(2, Math.min(newAttempts - 5, 4)); // max 16x multiplier
         const durationSeconds = 30 * multiplier;
-        const cooldownUntil = Date.now() + (durationSeconds * 1000);
-        
+        // eslint-disable-next-line react-hooks/purity
+        const cooldownUntil = Date.now() + durationSeconds * 1000;
+
         localStorage.setItem("rs_login_cooldown_until", String(cooldownUntil));
         setCooldown(durationSeconds);
-        toast.error(`Too many failed attempts. Try again in ${durationSeconds}s.`);
+        toast.error(
+          `Too many failed attempts. Try again in ${durationSeconds}s.`,
+        );
       }
     }
   };
