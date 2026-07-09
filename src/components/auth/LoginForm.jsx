@@ -38,12 +38,12 @@ function LoginContent() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      // Small delay to ensure cookie is set and Redux state is fully updated
+      // Use window.location for full page reload to ensure cookies are properly set and middleware runs
       setTimeout(() => {
-        router.replace("/dashboard");
+        window.location.href = "/dashboard";
       }, 100);
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const reason = params.get("reason");
@@ -103,7 +103,7 @@ function LoginContent() {
     if (cooldown > 0) return;
     dismissError();
 
-    const result = await dispatch(loginAdmin(data));
+    const result = await dispatch(loginAdmin(data)).unwrap();
 
     if (loginAdmin.fulfilled.match(result)) {
       // Clear persistence on success
@@ -112,7 +112,10 @@ function LoginContent() {
 
       const userName = result.payload?.name?.split(" ")[0] || "Admin";
       toast.success(`Welcome back, ${userName}! 👋`);
-      router.replace("/dashboard");
+      // Use window.location for full page reload to ensure cookies are properly set and middleware runs
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 100);
     } else {
       const errorMsg = result.payload;
       const msg = typeof errorMsg === "string" ? errorMsg.toLowerCase() : "";
