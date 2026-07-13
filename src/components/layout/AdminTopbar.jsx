@@ -22,7 +22,7 @@ const LABEL_MAP = {
 export default function AdminTopbar({ isSidebarOpen, toggleSidebar }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { admin, logout } = useAuth();
+  const { admin, logout, initializing } = useAuth();
 
   const getSegments = () => {
     if (LABEL_MAP[pathname]) return [LABEL_MAP[pathname]];
@@ -36,7 +36,7 @@ export default function AdminTopbar({ isSidebarOpen, toggleSidebar }) {
   };
 
   const segments = getSegments();
-  const initial = admin?.name ? admin.name.charAt(0).toUpperCase() : "R";
+  const initial = admin?.name ? admin.name.charAt(0).toUpperCase() : "";
 
   return (
     <header
@@ -105,8 +105,9 @@ export default function AdminTopbar({ isSidebarOpen, toggleSidebar }) {
         <div
           className="w-9 h-9 rounded-xl bg-primary flex items-center
           justify-center text-white text-sm font-bold"
+          suppressHydrationWarning
         >
-          {initial}
+          {!initializing && initial}
         </div>
       </div>
     </header>

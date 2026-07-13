@@ -1,14 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // turbo: false,
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: "https://serverrsdecor.vercel.app/api/:path*",
-      },
-    ];
-  },
   images: {
     remotePatterns: [
       {

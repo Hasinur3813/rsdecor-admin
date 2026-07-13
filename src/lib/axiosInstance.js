@@ -10,28 +10,71 @@ const axiosInstance = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+let isRefreshing = false;
+let failedQueue = [];
+let onSessionExpired = null;
+
+const processQueue = (error) => {
+  failedQueue.forEach(({ resolve, reject }) => {
+    if (error) reject(error);
+    else resolve();
+  });
+  failedQueue = [];
+};
+
+const isAuthEndpoint = (url = "") =>
+  url.includes("/auth/login") ||
+  url.includes("/auth/admin/login") ||
+  url.includes("/auth/register") ||
+  url.includes("/auth/refresh-token") ||
+  url.includes("/auth/logout");
+
+export const setSessionExpiredHandler = (handler) => {
+  onSessionExpired = handler;
+};
+
 axiosInstance.interceptors.request.use(
   (config) => config,
   (err) => Promise.reject(err),
 );
 
 axiosInstance.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    const status = err.response?.status;
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
 
-    if (status === 401 && typeof window !== "undefined") {
-      const url = err.config?.url || "";
-      if (!url.includes("/auth/")) {
-        window.location.href = "/login?reason=session_expired";
+    if (
+      !originalRequest ||
+      error.response?.status !== 401 ||
+      originalRequest._retry ||
+      isAuthEndpoint(originalRequest.url)
+    ) {
+      if (error.response?.status === 403 && typeof window !== "undefined") {
+        window.location.href = "/login?reason=unauthorized";
       }
+      return Promise.reject(error);
     }
 
-    if (status === 403 && typeof window !== "undefined") {
-      window.location.href = "/login?reason=unauthorized";
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      }).then(() => axiosInstance(originalRequest));
     }
 
-    return Promise.reject(err);
+    originalRequest._retry = true;
+    isRefreshing = true;
+
+    try {
+      await axiosInstance.post("/auth/refresh-token");
+      processQueue(null);
+      return axiosInstance(originalRequest);
+    } catch (refreshError) {
+      processQueue(refreshError);
+      onSessionExpired?.();
+      return Promise.reject(refreshError);
+    } finally {
+      isRefreshing = false;
+    }
   },
 );
 

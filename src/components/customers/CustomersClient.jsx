@@ -135,7 +135,7 @@ export default function CustomersClient() {
     try {
       const data = await patchCustomer(customer._id, {
         field: "role",
-        value: "admin",
+        value: customer.role === "admin" ? "user" : "admin",
       });
       if (data.success) {
         setCustomers((prev) =>
@@ -143,7 +143,9 @@ export default function CustomersClient() {
             c._id === customer._id ? { ...c, ...data.data } : c,
           ),
         );
-        toast.success("Customer promoted to admin");
+        toast.success(
+          `Customer ${data?.data?.role === "admin" ? "Promoted to admin" : "Demoted to user"}`,
+        );
       }
     } catch (error) {
       console.error("Failed to promote", error);
@@ -447,6 +449,7 @@ export default function CustomersClient() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              title="View Customer"
                               onClick={() =>
                                 router.push(`/customers/${customer._id}`)
                               }
@@ -457,8 +460,17 @@ export default function CustomersClient() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              className={`${customer.role === "admin" ? "hidden" : ""}`}
                               onClick={() => handleToggleStatus(customer)}
-                              disabled={updating === customer._id}
+                              disabled={
+                                updating === customer._id ||
+                                customer.role === "admin"
+                              }
+                              title={
+                                customer.isActive
+                                  ? "Deactivate User"
+                                  : "Activate User"
+                              }
                             >
                               {updating === customer._id ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -470,6 +482,7 @@ export default function CustomersClient() {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                title="Promote to Admin"
                                 onClick={() => handlePromoteToAdmin(customer)}
                                 disabled={updating === customer._id}
                               >
@@ -483,6 +496,7 @@ export default function CustomersClient() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              title="Delete Customer"
                               onClick={() => handleDeleteCustomer(customer)}
                               disabled={updating === customer._id}
                             >
