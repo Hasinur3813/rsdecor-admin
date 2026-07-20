@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
@@ -35,22 +36,22 @@ export default function SubcategoriesClient() {
   const [category, setCategory] = useState(null);
   const [error, setError] = useState(null);
 
-  // Fetch data
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const data = await fetchCategoryById(params.id);
-      setCategory(data.data);
-    } catch (err) {
-      setError(err.response?.data?.message || "Failed to load data");
-      toast.error(err.response?.data?.message || "Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    if (params.id) {
+    // Fetch data
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const data = await fetchCategoryById(params.id);
+
+        setCategory(data.data);
+      } catch (err) {
+        setError(err.response?.data?.message || "Failed to load data");
+        toast.error(err.response?.data?.message || "Failed to load data");
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (params?.id) {
       loadData();
     }
   }, [params.id]);
@@ -63,7 +64,9 @@ export default function SubcategoriesClient() {
       toast.success("Subcategory deleted successfully!");
       loadData();
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to delete subcategory");
+      toast.error(
+        err.response?.data?.message || "Failed to delete subcategory",
+      );
     }
   };
 
@@ -255,7 +258,11 @@ export default function SubcategoriesClient() {
                             variant="ghost"
                             size="sm"
                             className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                            onClick={() => handleDelete(subcategory.id || subcategory.subcategoryId)}
+                            onClick={() =>
+                              handleDelete(
+                                subcategory.id || subcategory.subcategoryId,
+                              )
+                            }
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
