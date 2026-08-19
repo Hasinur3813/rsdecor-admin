@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axiosInstance from "@/lib/axiosInstance";
+import { ADMIN_ROLES } from "@/lib/authConstants";
 
 const ENDPOINTS = {
   login: "/auth/admin/login",
@@ -7,12 +8,33 @@ const ENDPOINTS = {
   me: "/auth/me",
 };
 
+const isAdminRole = (role) => {
+  if (!role) return false;
+  return ADMIN_ROLES.includes(String(role).toLowerCase());
+};
+
+const sanitizeAdminPayload = (payload) => {
+  if (!payload || typeof payload !== "object") return null;
+  const allowed = ["_id", "id", "name", "email", "role", "avatar", "createdAt"];
+  const clean = {};
+  for (const key of allowed) {
+    if (key in payload) clean[key] = payload[key];
+  }
+  if (payload.role) clean.role = String(payload.role).toLowerCase();
+  return Object.keys(clean).length > 0 ? clean : null;
+};
+
 export const fetchMe = createAsyncThunk(
   "auth/fetchMe",
   async (_, { rejectWithValue }) => {
     try {
       const response = await axiosInstance.get(ENDPOINTS.me);
-      return response.data.data; // { _id, name, email, role }
+      const raw = response.data?.data;
+      const admin = sanitizeAdminPayload(raw);
+      if (!admin || !isAdminRole(admin.role)) {
+        return rejectWithValue("Unauthorized: admin role required");
+      }
+      return admin;
     } catch (err) {
       return rejectWithValue(
         err.response?.data?.message || err.message || "Failed to fetch user",
@@ -29,7 +51,12 @@ export const loginAdmin = createAsyncThunk(
         email: String(email).trim().toLowerCase(),
         password,
       });
-      return response.data.data.user;
+      const raw = response.data?.data?.user;
+      const admin = sanitizeAdminPayload(raw);
+      if (!admin || !isAdminRole(admin.role)) {
+        return rejectWithValue("Access denied. Admin credentials required.");
+      }
+      return admin;
     } catch (err) {
       return rejectWithValue(
         err.response?.data?.message ||
@@ -59,6 +86,7 @@ const authSlice = createSlice({
   initialState: {
     admin: null,
     isAuthenticated: false,
+    hasValidRole: false,
     loading: false,
     initializing: true,
     error: null,
@@ -72,31 +100,51 @@ const authSlice = createSlice({
     setSessionExpired: (state) => {
       state.sessionExpired = true;
       state.isAuthenticated = false;
+      state.hasValidRole = false;
       state.admin = null;
+      state.error = null;
     },
     updateAdmin: (state, action) => {
-      state.admin = { ...state.admin, ...action.payload };
+      if (!state.admin) return;
+      const updates = sanitizeAdminPayload({ ...state.admin, ...action.payload }) || state.admin;
+      state.admin = updates;
+      if (updates?.role) {
+        state.hasValidRole = isAdminRole(updates.role);
+      }
     },
   },
   extraReducers: (builder) => {
     builder
       // fetchMe
       .addCase(fetchMe.pending, (state) => {
-       if (!state.hasCheckedInitialAuth) {
-          state.initializing = true;
-        }
+        state.initializing = true;
+        state.error = null;
       })
       .addCase(fetchMe.fulfilled, (state, action) => {
         state.initializing = false;
-        state.isAuthenticated = true;
-        state.admin = action.payload;
-        state.sessionExpired = false;
+        const admin = action.payload;
+        const roleOk = isAdminRole(admin?.role);
+        if (roleOk) {
+          state.isAuthenticated = true;
+          state.hasValidRole = true;
+          state.admin = admin;
+          state.sessionExpired = false;
+          state.error = null;
+        } else {
+          state.isAuthenticated = false;
+          state.hasValidRole = false;
+          state.admin = null;
+        }
         state.hasCheckedInitialAuth = true;
       })
-      .addCase(fetchMe.rejected, (state) => {
+      .addCase(fetchMe.rejected, (state, action) => {
         state.initializing = false;
         state.isAuthenticated = false;
+        state.hasValidRole = false;
         state.admin = null;
+        if (action.payload?.includes?.("Unauthorized")) {
+          state.sessionExpired = true;
+        }
         state.hasCheckedInitialAuth = true;
       })
       // loginAdmin
@@ -107,15 +155,28 @@ const authSlice = createSlice({
       })
       .addCase(loginAdmin.fulfilled, (state, action) => {
         state.loading = false;
-        state.isAuthenticated = true;
-        state.admin = action.payload;
-        state.error = null;
-        state.sessionExpired = false;
-        state.hasCheckedInitialAuth = true;
+        const admin = action.payload;
+        const roleOk = isAdminRole(admin?.role);
+        if (roleOk) {
+          state.isAuthenticated = true;
+          state.hasValidRole = true;
+          state.admin = admin;
+          state.error = null;
+          state.sessionExpired = false;
+          state.hasCheckedInitialAuth = true;
+        } else {
+          state.isAuthenticated = false;
+          state.hasValidRole = false;
+          state.admin = null;
+          state.error = "Access denied. Admin credentials required.";
+        }
       })
       .addCase(loginAdmin.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload;
+        state.isAuthenticated = false;
+        state.hasValidRole = false;
+        state.admin = null;
+        state.error = action.payload || "Authentication failed";
       })
       // logoutAdmin
       .addCase(logoutAdmin.pending, (state) => {
@@ -124,13 +185,18 @@ const authSlice = createSlice({
       .addCase(logoutAdmin.fulfilled, (state) => {
         state.loading = false;
         state.isAuthenticated = false;
+        state.hasValidRole = false;
         state.admin = null;
         state.error = null;
+        state.sessionExpired = false;
+        state.hasCheckedInitialAuth = true;
       })
       .addCase(logoutAdmin.rejected, (state) => {
         state.loading = false;
         state.isAuthenticated = false;
+        state.hasValidRole = false;
         state.admin = null;
+        state.hasCheckedInitialAuth = true;
       });
   },
 });

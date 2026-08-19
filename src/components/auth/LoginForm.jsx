@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState, Suspense } from "react";
 import { useForm } from "react-hook-form";
-import { useDispatch } from "react-redux";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useDispatch, useSelector } from "react-redux";
+import { useSearchParams } from "next/navigation";
 import {
   Loader2,
   LogIn,
@@ -14,17 +14,18 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { loginAdmin, clearError } from "@/store/slices/authSlice";
-import { useAuth } from "@/hooks/useAuth";
+import { validateRedirectUrl } from "@/lib/authConstants";
 
 function LoginContent() {
   const dispatch = useDispatch();
-  const router = useRouter();
   const params = useSearchParams();
-  const { isAuthenticated, loading, error, sessionExpired, dismissError } =
-    useAuth();
+  const { isAuthenticated, loading, error, sessionExpired, hasCheckedInitialAuth } =
+    useSelector((s) => s.auth);
 
   const [attempts, setAttempts] = useState(0);
   const [cooldown, setCooldown] = useState(0);
+
+  const redirectTarget = validateRedirectUrl(params.get("redirect"));
 
   const {
     register,
@@ -37,13 +38,10 @@ function LoginContent() {
   });
 
   useEffect(() => {
-    if (isAuthenticated) {
-      // Use window.location for full page reload to ensure cookies are properly set and middleware runs
-      setTimeout(() => {
-        window.location.href = "/dashboard";
-      }, 100);
+    if (isAuthenticated && hasCheckedInitialAuth) {
+      window.location.href = redirectTarget;
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, hasCheckedInitialAuth, redirectTarget]);
 
   useEffect(() => {
     const reason = params.get("reason");
@@ -51,19 +49,22 @@ function LoginContent() {
       toast.error("Your session expired. Please sign in again.", {
         duration: 5000,
       });
-    }
-    if (reason === "unauthorized") {
+    } else if (reason === "unauthorized") {
       toast.error("Access denied. Admin credentials required.", {
         duration: 5000,
+      });
+    } else if (reason === "auth_required") {
+      toast("Please sign in to continue.", {
+        duration: 3500,
+        icon: "🔒",
       });
     }
   }, [params]);
 
-  // Initialize from storage on mount
   useEffect(() => {
     const savedAttempts =
       Number(localStorage.getItem("rs_login_attempts")) || 0;
-    setTimeout(() => setAttempts(savedAttempts), 0);
+    const id = setTimeout(() => setAttempts(savedAttempts), 0);
 
     const cooldownUntil = Number(
       localStorage.getItem("rs_login_cooldown_until"),
@@ -76,9 +77,9 @@ function LoginContent() {
     } else {
       localStorage.removeItem("rs_login_cooldown_until");
     }
+    return () => clearTimeout(id);
   }, []);
 
-  // Precise timer interval
   useEffect(() => {
     if (cooldown <= 0) return;
     const t = setInterval(() => {
@@ -99,23 +100,23 @@ function LoginContent() {
     return () => clearInterval(t);
   }, [cooldown]);
 
+  const dismissError = () => dispatch(clearError());
+
   const onSubmit = async (data) => {
     if (cooldown > 0) return;
     dismissError();
 
     try {
-      const user = await dispatch(loginAdmin(data)).unwrap();
+      await dispatch(loginAdmin(data)).unwrap();
 
-      // Clear persistence on success
       localStorage.removeItem("rs_login_attempts");
       localStorage.removeItem("rs_login_cooldown_until");
 
-      const userName = user?.name?.split(" ")[0] || "Admin";
-      toast.success(`Welcome back, ${userName}! 👋`);
-      // Use window.location for full page reload to ensure cookies are properly set and proxy runs
+      toast.success(`Welcome back! 👋`, { duration: 2500 });
+
       setTimeout(() => {
-        window.location.href = "/dashboard";
-      }, 100);
+        window.location.href = redirectTarget;
+      }, 150);
     } catch (error) {
       const errorMsg = error;
       const msg = typeof errorMsg === "string" ? errorMsg.toLowerCase() : "";
@@ -124,19 +125,21 @@ function LoginContent() {
         setFieldError("email", { message: errorMsg });
       } else if (msg.includes("password") || msg.includes("credentials")) {
         setFieldError("password", { message: errorMsg });
+      } else if (msg.includes("unauthorized") || msg.includes("access denied") || msg.includes("admin")) {
+        toast.error("Access denied. Admin account required.", {
+          duration: 5000,
+        });
       } else if (errorMsg) {
         toast.error(errorMsg);
       }
 
-      // Handle failed attempts & exponential backoff
       const newAttempts = attempts + 1;
       setAttempts(newAttempts);
       localStorage.setItem("rs_login_attempts", String(newAttempts));
 
       if (newAttempts >= 5) {
-        const multiplier = Math.pow(2, Math.min(newAttempts - 5, 4)); // max 16x multiplier
+        const multiplier = Math.pow(2, Math.min(newAttempts - 5, 4));
         const durationSeconds = 30 * multiplier;
-        // eslint-disable-next-line react-hooks/purity
         const cooldownUntil = Date.now() + durationSeconds * 1000;
 
         localStorage.setItem("rs_login_cooldown_until", String(cooldownUntil));

@@ -11,10 +11,14 @@ export default function AdminShell({ children }) {
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
+    setTimeout(() => {
+      setIsMounted(true);
+    }, 0);
     const saved = localStorage.getItem("sidebar-open");
     if (saved !== null) {
-      setIsSidebarOpen(saved === "true");
+      setTimeout(() => {
+        setIsSidebarOpen(saved === "true");
+      }, 0);
     }
   }, []);
 

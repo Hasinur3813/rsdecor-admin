@@ -2,22 +2,33 @@
 import { useEffect } from "react";
 import { Provider, useDispatch } from "react-redux";
 import { store } from "@/store";
-import { setSessionExpiredHandler } from "@/lib/axiosInstance";
-import { fetchMe, setSessionExpired } from "@/store/slices/authSlice";
-import toast from "react-hot-toast";
+import {
+  setSessionExpiredHandler,
+  setForbiddenHandler,
+} from "@/lib/axiosInstance";
+import { setSessionExpired } from "@/store/slices/authSlice";
 
 function InitializeAuth() {
   const dispatch = useDispatch();
 
   useEffect(() => {
-    // Set up session expired handler
+    let mounted = true;
+
     setSessionExpiredHandler(() => {
-      dispatch(setSessionExpired());
-      toast.error("Your session has expired. Please sign in again.");
+      if (mounted) {
+        dispatch(setSessionExpired());
+      }
     });
 
-    // Initialize auth state
-    dispatch(fetchMe());
+    setForbiddenHandler(() => {
+      if (mounted) {
+        dispatch(setSessionExpired());
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
   }, [dispatch]);
 
   return null;

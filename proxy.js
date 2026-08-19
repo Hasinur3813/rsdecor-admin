@@ -1,40 +1,53 @@
 import { NextResponse } from "next/server";
+import {
+  ADMIN_ROLES,
+  PUBLIC_PATHS,
+  buildLoginUrl,
+  validateRedirectUrl,
+} from "./src/lib/authConstants";
+
+const STATIC_PREFIX = "/_next";
 
 export function proxy(request) {
-  const token =
-    request.cookies.get("rs_access_token")?.value ||
-    request.cookies.get("rs_refresh_token")?.value;
-  const path = request.nextUrl.pathname;
+  const { pathname } = request.nextUrl;
 
-  // console.log(token);
-
-  // Paths that do not require authentication
-  const isPublicPath = path === "/login";
-
-  if (isPublicPath && token) {
-    // If the user has a token and tries to access the login page, redirect to dashboard
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+  if (
+    pathname.startsWith(STATIC_PREFIX) ||
+    pathname === "/favicon.ico" ||
+    pathname.match(
+      /\.(png|jpg|jpeg|svg|css|js|woff|woff2|ttf|eot|ico|webp|map)$/i,
+    )
+  ) {
+    return NextResponse.next();
   }
 
-  if (!isPublicPath && !token) {
-    // If the user has no token and tries to access a protected route, redirect to login
-    return NextResponse.redirect(new URL("/login", request.url));
+  const accessToken = request.cookies.get("rs_access_token")?.value;
+  const refreshToken = request.cookies.get("rs_refresh_token")?.value;
+  const hasAnyToken = Boolean(accessToken || refreshToken);
+
+  const isPublicPath = PUBLIC_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+
+  if (isPublicPath) {
+    if (hasAnyToken) {
+      const redirectParam = request.nextUrl.searchParams.get("redirect");
+      const safeRedirect = validateRedirectUrl(redirectParam);
+      return NextResponse.redirect(new URL(safeRedirect, request.url));
+    }
+    return NextResponse.next();
+  }
+
+  if (!hasAnyToken) {
+    const login = buildLoginUrl(pathname, "auth_required");
+    return NextResponse.redirect(new URL(login, request.url));
   }
 
   return NextResponse.next();
 }
 
-// See "Matching Paths" below to learn more
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - any files with an extension (e.g. .svg, .png, .jpg)
-     */
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.).*)",
-  ],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.).*)"],
 };
+
+export { ADMIN_ROLES, buildLoginUrl, validateRedirectUrl, PUBLIC_PATHS };

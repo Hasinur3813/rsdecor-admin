@@ -1,32 +1,84 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { fetchMe, setSessionExpired } from "@/store/slices/authSlice";
+import { ADMIN_ROLES, buildLoginUrl } from "@/lib/authConstants";
+import Loading from "app/loading";
 
 export default function AuthGuard({ children }) {
   const dispatch = useDispatch();
-  const router = useRouter();
   const pathname = usePathname();
-  
-  // Grab states directly from Redux to prevent route-change resets
-  const { hasCheckedInitialAuth } = useSelector((state) => state.auth);
+  const fetchAbortRef = useRef(null);
+  const redirectedRef = useRef(false);
+
+  const { hasCheckedInitialAuth, initializing, isAuthenticated, admin } =
+    useSelector((state) => state.auth);
+
+  const hasValidRole =
+    isAuthenticated &&
+    admin?.role &&
+    ADMIN_ROLES.includes(String(admin.role).toLowerCase());
 
   useEffect(() => {
-    // Only fetch if we haven't performed the initial check yet and we are not on login page
-    if (!hasCheckedInitialAuth && pathname !== '/login') {
-      dispatch(fetchMe())
-        .unwrap()
-        .catch(() => {
-          // If fetchMe fails, the token is likely invalid or expired
-          dispatch(setSessionExpired());
-          router.replace("/login");
-        });
-    }
-  }, [dispatch, hasCheckedInitialAuth, pathname, router]);
+    if (pathname === "/login") return;
+    if (hasCheckedInitialAuth) return;
 
-  // Middleware handles the initial auth check and redirecting unauthenticated users. 
-  // We no longer block the UI with a full-screen spinner. 
-  // The layout renders immediately for a seamless, flicker-free experience.
-  return <>{children}</>;
+    if (fetchAbortRef.current) {
+      fetchAbortRef.current.abort();
+    }
+
+    const abort = new AbortController();
+    fetchAbortRef.current = abort;
+
+    dispatch(fetchMe())
+      .unwrap()
+      .catch(() => {
+        if (abort.signal.aborted) return;
+        dispatch(setSessionExpired());
+        if (redirectedRef.current) return;
+        redirectedRef.current = true;
+        window.location.href = buildLoginUrl(pathname, "session_expired");
+      });
+
+    return () => {
+      abort.abort();
+    };
+  }, [dispatch, pathname, hasCheckedInitialAuth]);
+
+  useEffect(() => {
+    if (!hasCheckedInitialAuth || initializing) return;
+    if (redirectedRef.current) return;
+
+    if (!isAuthenticated) {
+      redirectedRef.current = true;
+      window.location.href = buildLoginUrl(pathname, "auth_required");
+      return;
+    }
+
+    if (isAuthenticated && admin && !hasValidRole) {
+      redirectedRef.current = true;
+      dispatch(setSessionExpired());
+      window.location.href = buildLoginUrl("/", "unauthorized");
+      return;
+    }
+  }, [
+    hasCheckedInitialAuth,
+    initializing,
+    isAuthenticated,
+    admin,
+    hasValidRole,
+    pathname,
+    dispatch,
+  ]);
+
+  if (initializing || !hasCheckedInitialAuth) {
+    return <Loading />;
+  }
+
+  if (!isAuthenticated || !hasValidRole) {
+    return <Loading />;
+  }
+
+  return children;
 }
